@@ -6,10 +6,10 @@
 <meta name="theme-color" content="#0E1B2C">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Vida Tranquila">
+<meta name="apple-mobile-web-app-title" content="Pura Vida">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
-<title>Vida Tranquila</title>
+<title>Pura Vida</title>
 <style>
 :root{
   --ink:#0E1B2C;--muted:#566170;--line:#E3E7EC;--bg:#F4F6F8;--card:#FFFFFF;
@@ -108,11 +108,11 @@ nav.tabs a.plus{width:58px;height:58px;margin-top:-24px;border-radius:29px;backg
 <script>
 'use strict';
 /* =========================================================
-   Vida Tranquila — app de finanças pessoais (v1)
+   Pura Vida — app de finanças pessoais
    Tudo corre no telemóvel. Dados encriptados (AES-GCM) com
    chave derivada da palavra-passe (PBKDF2). Sem servidores.
    ========================================================= */
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const STORE_KEY = 'vt_vault_v1';
 const LOCK_AFTER_MS = 2 * 60 * 1000;
 
@@ -275,7 +275,7 @@ let saveTimer = null;
 let hiddenAt = 0;
 
 /* Armazenamento: IndexedDB (sem limite prático); localStorage só como recurso */
-const IDB_NAME = 'vida-tranquila', IDB_STORE = 'kv';
+const IDB_NAME = 'vida-tranquila', IDB_STORE = 'kv'; // nome interno antigo: não mudar (é onde estão os dados)
 let idbP = null;
 function idb(){
   if (!idbP) idbP = new Promise((res, rej) => {
@@ -512,13 +512,13 @@ function ivaAPagarTrimestre(y, q){
   return r2(sum(S.movs.filter(m => m.tipo === 'receita' && new Date(m.data) >= a && new Date(m.data) <= b), m => m.iva || 0));
 }
 function makeICS(){
-  const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Vida Tranquila//PT','CALSCALE:GREGORIAN'];
+  const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Pura Vida//PT','CALSCALE:GREGORIAN'];
   const stamp = new Date().toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z';
   for (const p of deadlines(today(), 12)){
     const ds = p.iso.replace(/-/g,'');
     const next = new Date(p.date); next.setDate(next.getDate()+1);
-    lines.push('BEGIN:VEVENT', `UID:${p.id}-${ds}@vidatranquila`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${ds}`, `DTEND;VALUE=DATE:${iso(next).replace(/-/g,'')}`,
-      `SUMMARY:${p.nome} (${p.ref})`, 'DESCRIPTION:Lembrete da app Vida Tranquila. Confirma a data no Portal das Finanças / Segurança Social Direta.',
+    lines.push('BEGIN:VEVENT', `UID:${p.id}-${ds}@puravida`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${ds}`, `DTEND;VALUE=DATE:${iso(next).replace(/-/g,'')}`,
+      `SUMMARY:${p.nome} (${p.ref})`, 'DESCRIPTION:Lembrete da app Pura Vida. Confirma a data no Portal das Finanças / Segurança Social Direta.',
       'BEGIN:VALARM','TRIGGER:-P5D','ACTION:DISPLAY',`DESCRIPTION:${p.nome} daqui a 5 dias`,'END:VALARM',
       'BEGIN:VALARM','TRIGGER:-P1D','ACTION:DISPLAY',`DESCRIPTION:${p.nome} amanhã`,'END:VALARM','END:VEVENT');
   }
@@ -530,7 +530,7 @@ function makeICS(){
 function guessCategory(text){
   const t = norm(text);
   for (const c of S.categories){
-    for (const k of (c.kw || [])) if (k && t.includes(norm(k))) return c.nome;
+    for (const k of (c.kw || [])) if (k && new RegExp(`(^|[^a-z0-9])${norm(k).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}([^a-z0-9]|$)`).test(t)) return c.nome;
   }
   // aprende com o histórico: mesma descrição usada antes
   const prev = [...S.movs].reverse().find(m => m.tipo === 'despesa' && m.desc && t.includes(norm(m.desc)));
@@ -547,13 +547,129 @@ function parseQuick(text){
   const isReceita = /^(recibo|recebi|receita|pagamento de|fatura|factura)\b/.test(t);
   if (isReceita){
     const comIva = /\bcom\s+iva\b/.test(t) || (!/\bsem\s+iva\b/.test(t) && /^recibo/.test(t));
-    desc = desc.replace(/^(recebi|receita)\s*/i,'');
+    desc = desc.replace(/^(recebi|receita)\s*/i,'').replace(/^(da|do|de|dos|das)\s+/i,'');
     desc = desc ? desc.charAt(0).toUpperCase() + desc.slice(1) : 'Recibo';
     return { tipo:'receita', valor, desc, comIva };
   }
   desc = desc ? desc.charAt(0).toUpperCase() + desc.slice(1) : '';
   return { tipo:'despesa', valor, desc, cat: guessCategory(raw) };
 }
+
+/* ---------- Frases (escritas ou ditadas): perceber qualquer tipo de registo ---------- */
+const NUM_RE = /(\d+(?:[.\s]\d{3})*(?:[.,]\d{1,2})?)\s*(?:€|eur(?:os?)?)?/gi;
+function lastAmount(text){ const m = String(text).match(NUM_RE); return m ? parseNum(m[m.length-1].replace(/€|eur(os?)?/i,'')) : NaN; }
+const has = (t, ...ws) => ws.some(w => new RegExp(`(^|[^a-z])${w}([^a-z]|$)`).test(t));
+const PAY = ['paguei','pagar','pago','paga','pagamento','prestacao','reforco','reforcei','amortizei','amortizar','acertei','acerto','liquidei'];
+const MOVE = ['pus','poupei','transferi','guardei','meti','reforcei','depositei','pôr','por','transferencia','reservei'];
+function matchDebt(t, list = S.debts.filter(d => d.saldo > 0.005)){
+  const alias = d => { const n = norm(d.nome); const out = n.split(/[^a-z0-9]+/).filter(w => w.length >= 4);
+    if (n.includes('seguranca')) out.push('seguranca social', 'ss');
+    if (d.tipo === 'cartao') out.push('cartao'); if (d.tipo === 'splitwise') out.push('splitwise', 'split');
+    if (n.includes('financas')) out.push('financas', 'at'); return out.filter(w => !['credito','divida','plano'].includes(w) || list.filter(x => norm(x.nome).includes(w)).length === 1); };
+  let best = null, score = 0;
+  for (const d of list){ for (const a of alias(d)){ if (has(t, a.replace(/\s+/g, '\\s+')) && a.length > score){ best = d; score = a.length; } } }
+  return best;
+}
+function matchGoal(t){
+  const avail = S.goals.filter(g => g.fase === 1 || fase() === 2);
+  const find = id => avail.find(g => g.id === id);
+  if (has(t, 'ppr') && has(t, 'manel')) return find('ppr_manel');
+  if (has(t, 'ppr')) return find('ppr_joao');
+  if (has(t, 'emergencia')) return find('emerg');
+  if (has(t, 'reserva')) return find('reserva');
+  if (has(t, 'investir', 'acoes', 'investimento', 'investimentos', 'corretora')) return find('investir');
+  for (const g of avail){ const w = norm(g.nome).split(/[^a-z0-9]+/).filter(x => x.length >= 5 && !['fundo','reserva'].includes(x)); if (w.some(x => has(t, x))) return g; }
+  return null;
+}
+function matchFixa(t){
+  let best = null, score = 0;
+  for (const f of S.fixas){ for (const w of norm(f.nome).split(/[^a-z0-9]+/).filter(x => x.length >= 4 && !['conta','casa'].includes(x) || norm(f.nome) === x)){ if (has(t, w) && w.length > score){ best = f; score = w.length; } } }
+  if (!best && has(t, 'conta conjunta')) best = S.fixas.find(f => norm(f.nome).includes('conjunta')) || null;
+  return best;
+}
+function debtTypeFrom(t){
+  if (has(t, 'financas', 'seguranca social', 'ss', 'at', 'coima')) return 'estado';
+  if (has(t, 'cartao')) return 'cartao'; if (has(t, 'splitwise', 'split')) return 'splitwise';
+  if (has(t, 'habitacao', 'casa')) return 'habitacao'; if (has(t, 'automovel', 'carro')) return 'automovel';
+  if (has(t, 'credito', 'emprestimo')) return 'credito'; return 'pessoal';
+}
+function parseCommand(text){
+  const raw = String(text || '').trim().replace(/[.!]+$/, '');
+  if (!raw) return null;
+  const t = norm(raw);
+  // nova dívida: "nova dívida Finanças 600 prestação 50 taeg 9"
+  if (/^(nova|adicionar|criar|registar)\s+divida\b/.test(t) || /^devo\b/.test(t)){
+    let rest = t; const grab = re => { const m = rest.match(re); if (m){ rest = rest.replace(m[0], ' '); return parseNum(m[1]); } return 0; };
+    const prestacao = grab(/presta(?:cao|coes)?\s*(?:de\s*)?(\d+(?:[.,]\d{1,2})?)/);
+    const taeg = grab(/(?:taeg|juro|juros|taxa)\s*(?:de\s*)?(\d+(?:[.,]\d{1,2})?)\s*%?/);
+    const saldo = lastAmount(rest);
+    let nome = raw.replace(/^(nova|adicionar|criar|registar)\s+d[ií]vida\s*/i, '').replace(/^devo\s*/i, '')
+      .replace(/presta[çc](ão|ao|ões|oes)?\s*(de\s*)?\d+([.,]\d{1,2})?\s*(€|euros?)?/gi, '').replace(/(taeg|juros?|taxa)\s*(de\s*)?\d+([.,]\d{1,2})?\s*%?/gi, '')
+      .replace(NUM_RE, '').replace(/\b(ao|à|a|aos|às|de|no|na|em)\b\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+    nome = nome ? nome.charAt(0).toUpperCase() + nome.slice(1) : 'Dívida';
+    return { kind:'novaDivida', nome, saldo, prestacao, taeg, tipo: debtTypeFrom(t), valor: saldo };
+  }
+  const valor = lastAmount(raw);
+  // receita
+  const p = parseQuick(raw);
+  if (p && p.tipo === 'receita') return { kind:'receita', valor, desc:p.desc, comIva:p.comIva };
+  // impostos do próprio (não dívidas): "paguei IVA 412", "paguei IRS 300"
+  const debt = matchDebt(t);
+  const taxWord = has(t, 'iva') ? 'iva' : has(t, 'irs') ? 'irs' : (has(t, 'seguranca social', 'ss') ? 'ss' : null);
+  const debtHint = has(t, 'divida', 'prestacao', 'plano', 'reforco', 'acertei', 'acerto', 'amortizei');
+  if (taxWord && has(t, ...PAY) && (taxWord !== 'ss' || !debt || (!debtHint && Math.abs((debt.prestacao||0) - valor) > 0.009)) && !(taxWord === 'iva' && debtHint)){
+    const label = { iva:'IVA', irs:'IRS', ss:'Segurança Social' }[taxWord];
+    return { kind:'imposto', valor, impTipo:taxWord, desc:`Pagamento ${label}`, alt: debt ? { kind:'divida', valor, debtId:debt.id } : null };
+  }
+  // pagamento de dívida
+  if (debt && (has(t, ...PAY) || debtHint)){
+    const alt = taxWord ? { kind:'imposto', valor, impTipo:taxWord, desc:`Pagamento ${{ iva:'IVA', irs:'IRS', ss:'Segurança Social' }[taxWord]}` } : null;
+    return { kind:'divida', valor, debtId:debt.id, extra: has(t, 'reforco', 'reforcei', 'amortizei', 'amortizar'), alt };
+  }
+  // transferência para meta
+  const goal = matchGoal(t);
+  if (goal && (has(t, ...MOVE) || has(t, 'para'))) return { kind:'transferencia', valor, goalId:goal.id };
+  // despesa fixa paga: "Netflix paga", "paguei a escola"
+  const fixa = matchFixa(t);
+  if (fixa && (has(t, ...PAY) || isNaN(valor))) return { kind:'fixa', fixaId:fixa.id, valor: isNaN(valor) ? fixa.valor : valor };
+  // despesa normal
+  if (p && p.tipo === 'despesa') return { kind:'despesa', valor, desc:p.desc || p.cat, cat:p.cat };
+  return null;
+}
+function describeAction(a){
+  if (!a) return null;
+  const bad = (a.kind !== 'fixa' && (isNaN(a.valor) || a.valor <= 0));
+  if (bad) return { ok:false, html:`<span>Falta o valor. Ex.: “gasolina 45”.</span>` };
+  const L = (tag, main, sub) => ({ ok:true, html:`<span class="pill teal" style="align-self:flex-start">${tag}</span><b style="font-size:15px">${main}</b>${sub ? `<span class="small">${sub}</span>` : ''}` });
+  switch (a.kind){
+    case 'despesa': return L('Despesa', `${esc(a.desc)} · ${eur(a.valor)}`, esc(a.cat));
+    case 'receita': { const r = S.rules, iva = a.comIva ? r2(a.valor*r.ivaTaxa) : 0, ss = r2(a.valor*r.ssCoeficiente*r.ssTaxa), irs = r2(a.valor*(S.settings.irsPct||0)/100);
+      return L('Receita', `${esc(a.desc)} · ${eur(a.valor)}${a.comIva ? ` + IVA ${eur(iva)}` : ''}`, `Reserva SS ${eur(ss)} e IRS ${eur(irs)} · fica para ti ${eur(a.valor - ss - irs)}`); }
+    case 'divida': { const d = S.debts.find(x => x.id === a.debtId); const v = Math.min(a.valor, d.saldo);
+      return L(d.tipo === 'splitwise' ? 'Acerto Splitwise' : a.extra ? 'Reforço de dívida' : 'Pagamento de dívida', `${esc(d.nome)} · ${eur(v)}`, `Falta depois: ${eur(d.saldo - v)}${a.valor > d.saldo ? ' (valor limitado ao que falta)' : ''}`); }
+    case 'imposto': { const TB = taxBreakdown(); const res = TB[a.impTipo] ?? 0;
+      return L('Imposto', `${esc(a.desc)} · ${eur(a.valor)}`, `A reserva para ${a.impTipo === 'ss' ? 'Segurança Social' : a.impTipo.toUpperCase()} desce de ${eur(res)} para ${eur(Math.max(0, res - a.valor))}`); }
+    case 'transferencia': { const g = S.goals.find(x => x.id === a.goalId);
+      return L('Para meta', `${esc(g.nome)} · ${eur(a.valor)}`, `Fica com ${eur((g.saldo||0) + a.valor)} · não conta como gasto`); }
+    case 'fixa': { const f = S.fixas.find(x => x.id === a.fixaId); const done = fixaPaidThisMonth(f, monthKey(today()));
+      return done ? { ok:false, html:`<span>${esc(f.nome)} já está marcada como paga este mês.</span>` } : L('Despesa fixa paga', `${esc(f.nome)} · ${eur(a.valor)}`, esc(f.cat)); }
+    case 'novaDivida': return L('Nova dívida', `${esc(a.nome)} · ${eur(a.saldo)}`, `${esc(DEBT_TYPES.find(x => x[0] === a.tipo)?.[1] || '')}${a.prestacao ? ` · prestação ${eur(a.prestacao)}` : ''}${a.taeg ? ` · TAEG ${String(a.taeg).replace('.', ',')}%` : ''}`);
+  }
+  return null;
+}
+function runAction(a){
+  const data = iso(today());
+  switch (a.kind){
+    case 'despesa': S.movs.push({ id:uid(), data, tipo:'despesa', valor:r2(a.valor), cat:a.cat, desc:a.desc }); return `Registado: ${a.desc} ${eur(a.valor)}`;
+    case 'receita': addReceita(S, { data, desc:a.desc, base:a.valor, comIva:a.comIva }); return 'Receita registada e reservas feitas';
+    case 'divida': { const d = S.debts.find(x => x.id === a.debtId); payDebt(d, Math.min(a.valor, d.saldo), data); return d.saldo <= 0.005 ? `${d.nome} está paga!` : `Falta ${eur(d.saldo)} em ${d.nome}`; }
+    case 'imposto': S.movs.push({ id:uid(), data, tipo:'despesa', valor:r2(a.valor), cat:'Impostos', impTipo:a.impTipo, desc:a.desc }); return `${a.desc} registado`;
+    case 'transferencia': { const g = S.goals.find(x => x.id === a.goalId); S.movs.push({ id:uid(), data, tipo:'transferencia', valor:r2(a.valor), metaId:g.id, desc:g.nome }); g.saldo = r2((g.saldo||0) + a.valor); return `${eur(a.valor)} para ${g.nome}`; }
+    case 'fixa': { const f = S.fixas.find(x => x.id === a.fixaId); S.movs.push({ id:uid(), data, tipo:'despesa', valor:r2(a.valor), cat:f.cat, desc:f.nome, fixaId:f.id }); return `${f.nome} marcada como paga`; }
+    case 'novaDivida': S.debts.push({ id:uid(), nome:a.nome, tipo:a.tipo, saldo:r2(a.saldo), prestacao:r2(a.prestacao||0), taeg:r2(a.taeg||0), dia:0, nota:'' }); return `Dívida “${a.nome}” criada`;
+  }
+}
+const VOICE_EXAMPLES = [['Despesa','supermercado 62,40'],['Receita','recibo João Andrade 300 com IVA'],['Dívida','paguei 102 às Finanças'],['Reforço','reforço cartão 200'],['Splitwise','acertei 50 no Splitwise'],['Meta','pus 150 no fundo de emergência'],['Imposto','paguei IVA 412'],['Fixa paga','Netflix paga'],['Nova dívida','nova dívida Finanças 600 prestação 50']];
 
 /* ---------- UI base ---------- */
 const app = $('#app');
@@ -626,11 +742,12 @@ function vHoje(){
     <span style="flex:1"><b>Cópia semanal</b><br>${S.settings.ultimaCopia ? `A última foi a ${shortDate(S.settings.ultimaCopia)}.` : 'Ainda não fizeste nenhuma.'} Guarda-a no iCloud Drive.</span>
     <button class="btn sm" id="doBackup">Fazer cópia</button></section>` : ''}
   <form id="quick" class="row" style="gap:8px" autocomplete="off">
-    <label class="sr" for="quickIn">Registo rápido</label>
-    <input id="quickIn" class="input" style="flex:1;height:52px;border-radius:16px" placeholder="ex.: gasolina 45" enterkeyhint="done">
-    <button class="iconbtn" type="submit" aria-label="Registar" style="width:52px;height:52px;border-radius:16px;background:var(--teal-soft);color:var(--teal)">${ic('check',22,2.2)}</button>
+    <label class="sr" for="quickIn">Registo rápido: escreve ou dita</label>
+    <input id="quickIn" class="input" style="flex:1;height:52px;border-radius:16px" placeholder="Escreve ou dita…" enterkeyhint="done" autocapitalize="sentences">
+    <button class="iconbtn" type="button" id="micBtn" aria-label="Ditar por voz" style="width:52px;height:52px;border-radius:16px;background:var(--teal-soft);color:var(--teal)">${ic('mic',22,2)}</button>
   </form>
   <div id="quickPrev"></div>
+  <button type="button" id="voiceHelp" class="small" style="align-self:flex-start;border:none;background:none;color:var(--teal);font-weight:600;padding:0;margin-top:-6px;cursor:pointer">O que posso dizer?</button>
   ${pend.length || deb.length ? `<section class="card tight" aria-label="Por pagar este mês"><p class="lbl" style="padding-top:10px">Por pagar este mês</p><div class="list">
     ${pend.map(f => `<div class="item"><div class="grow"><p class="t15">${esc(f.nome)}</p><p class="small muted">dia ${f.dia} · ${esc(f.cat)}</p></div><p class="num" style="font-size:15px">${eur(f.valor)}</p><button class="btn sm sec" data-payfixa="${f.id}">Pago</button></div>`).join('')}
     ${deb.map(d => `<div class="item"><div class="grow"><p class="t15">${esc(d.nome)}${d.tipo==='estado'?'<span class="badge">ESTADO</span>':''}</p><p class="small muted">prestação · dia ${d.dia||'—'}</p></div><p class="num" style="font-size:15px">${eur(Math.min(d.prestacao,d.saldo))}</p><button class="btn sm sec" data-paydebt="${d.id}">Pago</button></div>`).join('')}
@@ -655,24 +772,43 @@ function movRow(m){
 }
 AFTER.hoje = () => {
   const inp = $('#quickIn'), prev = $('#quickPrev');
+  let current = null;
   const show = () => {
-    const p = parseQuick(inp.value);
-    if (!p || isNaN(p.valor)){ prev.innerHTML = ''; return; }
-    prev.innerHTML = p.tipo === 'receita'
-      ? `<p class="note green">Receita · ${esc(p.desc)} · ${eur(p.valor)}${p.comIva ? ' + IVA' : ''} → toca ✓ para ver as reservas</p>`
-      : `<p class="note blue">Despesa · ${esc(p.desc || p.cat)} · <strong>${eur(p.valor)}</strong> · ${esc(p.cat)}</p>`;
+    current = parseCommand(inp.value);
+    const d = describeAction(current);
+    if (!d){ prev.innerHTML = inp.value.trim() ? `<p class="note blue">Não percebi. Toca em “O que posso dizer?” ou abre o registo completo com o botão +.</p>` : ''; current = null; return; }
+    const alt = current.alt ? describeAction(current.alt) : null;
+    prev.innerHTML = `<section class="card" style="display:flex;flex-direction:column;gap:6px;border:2px solid ${d.ok ? 'var(--teal)' : 'var(--line)'}">${d.html}
+      ${d.ok ? `<div class="row" style="gap:8px;margin-top:6px"><button type="button" class="btn sm" id="qSave" style="flex:1">Guardar</button><button type="button" class="btn sm sec" id="qEdit">Editar</button></div>` : ''}
+      ${alt && alt.ok ? `<button type="button" class="small" id="qAlt" style="border:none;background:none;color:var(--teal);font-weight:600;padding:4px 0 0;text-align:left;cursor:pointer">Não é isto? Registar como ${current.alt && current.alt.kind === 'imposto' ? 'contribuição/imposto do mês' : 'pagamento da dívida'}</button>` : ''}</section>`;
+    const sv = $('#qSave'); if (sv) sv.onclick = commit;
+    const ed = $('#qEdit'); if (ed) ed.onclick = () => go('registar', { text: inp.value });
+    const al = $('#qAlt'); if (al) al.onclick = () => { current = current.alt; commit(); };
+  };
+  const commit = () => {
+    if (!current) return; const d = describeAction(current); if (!d || !d.ok) return;
+    const msg = runAction(current); save(); toast(msg); render();
   };
   inp.addEventListener('input', show);
+  $('#quick').addEventListener('submit', e => { e.preventDefault(); if (current && describeAction(current)?.ok) commit(); else if (inp.value.trim()) go('registar', { text: inp.value }); });
+  $('#voiceHelp').onclick = () => openSheet(`<div class="between"><h2>O que posso dizer?</h2><button class="iconbtn" data-close aria-label="Fechar">${ic('x')}</button></div>
+    <p class="small muted" style="margin:0">Toca no campo, depois no microfone do teclado, e fala. Antes de gravar mostro sempre o que percebi.</p>
+    <div class="card tight"><div class="list">${VOICE_EXAMPLES.map(([k, v]) => `<button type="button" class="item" data-ex="${esc(v)}" style="width:100%;background:none;border-left:none;border-right:none;border-bottom:none;text-align:left;cursor:pointer;color:inherit"><span class="small muted" style="width:86px;flex-shrink:0">${k}</span><span class="grow t15">“${esc(v)}”</span></button>`).join('')}</div></div>`,
+    sh => sh.querySelectorAll('[data-ex]').forEach(b => b.onclick = () => { closeSheet(true); inp.value = b.dataset.ex; show(); inp.focus(); }));
+  $('#micBtn').onclick = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SR && !isStandalone()){
+      try {
+        const rec = new SR(); rec.lang = 'pt-PT'; rec.interimResults = false; rec.maxAlternatives = 1;
+        rec.onresult = ev => { inp.value = ev.results[0][0].transcript; show(); };
+        rec.onerror = () => { inp.focus(); toast('Usa o microfone do teclado'); };
+        rec.start(); toast('A ouvir…'); return;
+      } catch(e){}
+    }
+    inp.focus(); toast('Toca no microfone do teclado e fala');
+  };
   const hi = $('#hideInstall'); if (hi) hi.onclick = () => { S.settings.ocultarInstalar = true; save(); render(); };
   const db = $('#doBackup'); if (db) db.onclick = exportBackup;
-  $('#quick').addEventListener('submit', e => {
-    e.preventDefault();
-    const p = parseQuick(inp.value);
-    if (!p || isNaN(p.valor) || p.valor <= 0){ go('registar', { text: inp.value }); return; }
-    if (p.tipo === 'receita'){ go('registar', { text: inp.value }); return; }
-    S.movs.push({ id:uid(), data:iso(today()), tipo:'despesa', valor:r2(p.valor), cat:p.cat, desc:p.desc || p.cat });
-    save(); toast(`Registado: ${p.desc || p.cat} ${eur(p.valor)}`); render();
-  });
   bindMovRows();
   document.querySelectorAll('[data-payfixa]').forEach(b => b.onclick = () => {
     const f = S.fixas.find(x => x.id === b.dataset.payfixa);
@@ -1188,7 +1324,7 @@ function vDefinicoes(){
     <button class="btn sec" id="chPass">Alterar palavra-passe</button>
     <button class="btn sec" id="newCode">Gerar novo código de recuperação</button>
     <button class="btn danger" id="wipe">Apagar todos os dados deste telemóvel</button></section>
-  <p class="small muted" style="margin:0;text-align:center">Vida Tranquila ${APP_VERSION} · os dados ficam só neste telemóvel</p>
+  <p class="small muted" style="margin:0;text-align:center">Pura Vida ${APP_VERSION.replace(/\.0$/, '')} · os dados ficam só neste telemóvel</p>
   </main>`;
 }
 function setRow(k, label, val, hint){ return `<button class="item" data-set="${k}" style="width:100%;background:none;border-left:none;border-right:none;border-bottom:none;text-align:left;cursor:pointer;color:inherit"><div class="grow"><p class="t15">${label}</p><p class="small muted">${hint}</p></div><p class="small" style="font-weight:600">${val}</p>${ic('chev',18)}</button>`; }
@@ -1257,13 +1393,13 @@ AFTER.definicoes = () => {
 async function exportBackup(){
   if (!VAULT) return;
   await saveNow();
-  const name = `vida-tranquila-copia-${iso(today())}.json`;
-  const content = JSON.stringify({ app:'vida-tranquila', ...VAULT });
+  const name = `pura-vida-copia-${iso(today())}.json`;
+  const content = JSON.stringify({ app:'pura-vida', ...VAULT });
   let ok = false;
   try {
     const file = new File([content], name, { type:'application/json' });
     if (navigator.canShare && navigator.canShare({ files:[file] })){
-      await navigator.share({ files:[file], title:'Cópia Vida Tranquila' }); ok = true;
+      await navigator.share({ files:[file], title:'Cópia Pura Vida' }); ok = true;
     }
   } catch(e){ if (e && e.name === 'AbortError') return; }
   if (!ok){ download(name, content, 'application/json'); ok = true; }
@@ -1308,9 +1444,9 @@ async function renderLogin(){
   const logo = `<div class="logo"><svg width="64" height="64" viewBox="0 0 120 120" aria-hidden="true"><rect width="120" height="120" rx="28" fill="#FDF6EC"/><path d="M32 74 A28 28 0 0 1 88 74 Z" fill="#F59E0B"/><line x1="22" y1="74" x2="98" y2="74" stroke="#0E1B2C" stroke-width="6" stroke-linecap="round"/><line x1="36" y1="90" x2="84" y2="90" stroke="#0F766E" stroke-width="6" stroke-linecap="round"/></svg></div>`;
   app.innerHTML = `<main class="login">
     ${logo}
-    <div><h1 style="font-size:28px">Vida Tranquila</h1><p class="muted" style="margin:6px 0 0">${first ? 'Cria uma palavra-passe. Os teus dados ficam encriptados só neste telemóvel.' : 'Introduz a palavra-passe para entrar.'}</p></div>
+    <div><h1 style="font-size:28px">Pura Vida</h1><p class="muted" style="margin:6px 0 0">${first ? 'Cria uma palavra-passe. Os teus dados ficam encriptados só neste telemóvel.' : 'Introduz a palavra-passe para entrar.'}</p></div>
     <form id="lf" style="display:flex;flex-direction:column;gap:12px">
-      <input type="text" name="username" autocomplete="username" value="Vida Tranquila" class="sr" tabindex="-1" aria-hidden="true">
+      <input type="text" name="username" autocomplete="username" value="Pura Vida" class="sr" tabindex="-1" aria-hidden="true">
       <label class="field"><span>Palavra-passe</span><input class="input" type="password" id="lp" autocomplete="${first?'new-password':'current-password'}" required></label>
       ${first ? `<label class="field"><span>Repetir palavra-passe</span><input class="input" type="password" id="lp2" autocomplete="new-password" required></label>
       <p class="note blue">A seguir recebes um código de recuperação, para entrares se te esqueceres da palavra-passe.</p>` : ''}
@@ -1327,6 +1463,8 @@ async function renderLogin(){
         if (p !== $('#lp2').value) throw new Error('As palavras-passe não coincidem');
         const { fields, code } = await newVaultKeys(p);
         VAULT = fields;
+        // guarda logo, para a palavra-passe ficar criada mesmo que a app feche a meio
+        S = freshState(); S.onboarded = false; await saveNow();
         showRecoveryCode(code, onboarding);
         return;
       }
@@ -1338,6 +1476,7 @@ async function renderLogin(){
         showRecoveryCode(code, () => { location.hash = location.hash || 'hoje'; render(); });
         return;
       }
+      if (S.onboarded === false){ onboarding(); return; }
       location.hash = location.hash || 'hoje'; render();
     } catch(err){
       KEY = null; DEK_RAW = null; S = null; btn.disabled = false; btn.textContent = first ? 'Criar e entrar' : 'Entrar';
@@ -1353,7 +1492,7 @@ function showRecoveryCode(code, next){
     <p id="rcCode" style="margin:0;padding:18px;border-radius:16px;background:var(--card);border:2px dashed var(--teal);font-family:ui-monospace,Menlo,monospace;font-size:20px;font-weight:700;letter-spacing:1px;text-align:center;line-height:1.6;user-select:all;-webkit-user-select:all">${esc(code)}</p>
     <button class="btn sec" type="button" id="rcCopy">Copiar código</button>
     <div class="note amber" style="display:flex;flex-direction:column;gap:4px"><b>Guarda-o em pelo menos um destes sítios:</b>
-      <span>· Palavras-passe do iPhone (nova entrada “Vida Tranquila — recuperação”)</span>
+      <span>· Palavras-passe do iPhone (nova entrada “Pura Vida — recuperação”)</span>
       <span>· Uma nota bloqueada nas Notas</span>
       <span>· Em papel, num sítio seguro em casa</span>
       <span>Quem tiver o código consegue abrir os teus dados: não o partilhes por mensagem.</span></div>
@@ -1371,7 +1510,7 @@ async function recoveryFlow(){
     <div><h1 style="font-size:24px">Recuperar acesso</h1><p class="muted" style="margin:6px 0 0">Escreve o código de recuperação (com ou sem traços) e escolhe uma palavra-passe nova.</p></div>
     <form id="rf" style="display:flex;flex-direction:column;gap:12px" autocomplete="off">
       <label class="field"><span>Código de recuperação</span><input class="input" id="rcIn" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" style="font-family:ui-monospace,Menlo,monospace"></label>
-      <input type="text" name="username" autocomplete="username" value="Vida Tranquila" class="sr" tabindex="-1" aria-hidden="true">
+      <input type="text" name="username" autocomplete="username" value="Pura Vida" class="sr" tabindex="-1" aria-hidden="true">
       <label class="field"><span>Nova palavra-passe (mín. 8)</span><input class="input" type="password" id="rp1" autocomplete="new-password"></label>
       <label class="field"><span>Repetir</span><input class="input" type="password" id="rp2" autocomplete="new-password"></label>
       <button class="btn" type="submit" id="rb">Recuperar e entrar</button>
@@ -1399,7 +1538,7 @@ function onboarding(){
     <button class="btn" id="obEmpty">Começar com os meus dados</button>
     <button class="btn sec" id="obDemo">Experimentar com dados de exemplo</button>
   </main>`;
-  $('#obDemo').onclick = () => { S = demoState(); save(); location.hash = 'hoje'; render(); toast('Dados de exemplo carregados'); };
+  $('#obDemo').onclick = () => { S = demoState(); S.onboarded = true; save(); location.hash = 'hoje'; render(); toast('Dados de exemplo carregados'); };
   $('#obEmpty').onclick = () => {
     S = freshState();
     app.innerHTML = `<main class="login">
@@ -1412,12 +1551,12 @@ function onboarding(){
       const a = parseNum($('#o1').value), b = parseNum($('#o2').value), c = parseNum($('#o3').value);
       S.settings.saldoInicial = isNaN(a) ? 0 : r2(a); S.settings.mesBase = isNaN(b) ? 0 : r2(b); S.settings.irsPct = isNaN(c) ? 15 : r2(c);
       const g = S.goals.find(x => x.id === 'reserva'); if (g) g.alvo = S.settings.mesBase;
-      save(); location.hash = 'hoje'; render();
+      S.onboarded = true; save(); location.hash = 'hoje'; render();
       setTimeout(() => toast('Começa por adicionar as despesas fixas e as dívidas'), 400);
     };
   };
 }
-function migrate(){ if (!S.v) S.v = 1; S.settings = { ...freshState().settings, ...S.settings }; }
+function migrate(){ if (!S.v) S.v = 1; if (S.onboarded === undefined) S.onboarded = true; S.settings = { ...freshState().settings, ...S.settings }; }
 function lock(){ S = null; KEY = null; DEK_RAW = null; closeSheet(true); renderLogin(); }
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) hiddenAt = Date.now();
@@ -1426,7 +1565,7 @@ document.addEventListener('visibilitychange', () => {
 
 /* ---------- Arranque ---------- */
 if (!window.crypto || !crypto.subtle){
-  app.innerHTML = '<main class="login"><h1>Vida Tranquila</h1><p>Este browser não suporta encriptação. Abre a app em https (por exemplo no Safari).</p></main>';
+  app.innerHTML = '<main class="login"><h1>Pura Vida</h1><p>Este browser não suporta encriptação. Abre a app em https (por exemplo no Safari).</p></main>';
 } else {
   renderLogin();
 }
@@ -1434,7 +1573,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:'){
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 // Exposto só para testes automáticos
-window.__vt = { rawVault: async () => JSON.stringify(await readVault()), parseQuick, livre: () => livre(), simulateDebts: x => simulateDebts(x), get S(){ return S; }, deadlines: () => deadlines(), taxBreakdown: () => taxBreakdown() };
+window.__vt = { parseCommand: t => parseCommand(t), describe: t => describeAction(parseCommand(t)), rawVault: async () => JSON.stringify(await readVault()), parseQuick, livre: () => livre(), simulateDebts: x => simulateDebts(x), get S(){ return S; }, deadlines: () => deadlines(), taxBreakdown: () => taxBreakdown() };
 </script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-# Finanças pessoais (Vida Tranquila, nome provisório)
+# Pura Vida — finanças pessoais
 
 App web instalável (PWA) para registar receitas, despesas, dívidas, metas e impostos de trabalhador independente.
 
