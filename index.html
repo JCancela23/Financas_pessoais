@@ -1,0 +1,1440 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1B2C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Vida Tranquila">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Vida Tranquila</title>
+<style>
+:root{
+  --ink:#0E1B2C;--muted:#566170;--line:#E3E7EC;--bg:#F4F6F8;--card:#FFFFFF;
+  --teal:#0F766E;--teal-soft:#CCFBF1;--amber:#B45309;--amber-soft:#FEF3C7;
+  --blue-soft:#DBEAFE;--blue-ink:#1E3A8A;--red:#B91C1C;
+  --num:"Space Grotesk",ui-rounded,-apple-system,system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,-apple-system,system-ui,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+body{min-height:100vh}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--teal)}
+#app{max-width:480px;margin:0 auto;min-height:100vh;position:relative}
+.view{padding:calc(env(safe-area-inset-top) + 20px) 18px calc(env(safe-area-inset-bottom) + 110px);display:flex;flex-direction:column;gap:14px}
+.row{display:flex;align-items:center;gap:10px}
+.between{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px}
+.card.tight{padding:6px 16px}
+h1{margin:0;font-size:24px;font-family:var(--num);font-weight:700}
+h2{margin:0;font-size:16px;font-weight:600}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.lbl{margin:0;font-size:13px;font-weight:500;color:var(--muted)}
+.num{font-family:var(--num);font-weight:700}
+.big{font-size:34px}
+.pill{font-size:12px;font-weight:600;padding:5px 10px;border-radius:99px;white-space:nowrap}
+.pill.blue{background:var(--blue-soft);color:var(--blue-ink)}
+.pill.teal{background:var(--teal-soft);color:var(--teal)}
+.pill.amber{background:var(--amber-soft);color:#92400E}
+.bar{height:8px;background:#E8ECF0;border-radius:99px;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:99px;background:var(--teal)}
+.list>.item{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line)}
+.list>.item:first-child{border-top:none}
+.item .grow{flex:1;min-width:0}
+.item p{margin:0}
+.t15{font-size:15px;font-weight:600}
+.btn{height:50px;border-radius:14px;border:none;background:var(--teal);color:#fff;font-weight:600;font-size:16px;padding:0 18px;cursor:pointer;width:100%}
+.btn.sec{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn.ghost{background:transparent;color:var(--ink);border:1px dashed #9AA5B1}
+.btn.danger{background:#fff;color:var(--red);border:1px solid #FECACA}
+.btn.sm{height:38px;font-size:14px;width:auto;border-radius:11px;padding:0 14px}
+.iconbtn{width:44px;height:44px;border:none;background:transparent;display:flex;align-items:center;justify-content:center;border-radius:12px;cursor:pointer;color:var(--ink)}
+.field{display:flex;flex-direction:column;gap:6px}
+.field>span{font-size:13px;font-weight:500;color:var(--muted)}
+.input{height:50px;border-radius:14px;border:1px solid var(--line);background:#fff;padding:0 14px;font-size:16px;width:100%;outline:none}
+.input:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(15,118,110,.15)}
+select.input{appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,#566170 50%),linear-gradient(135deg,#566170 50%,transparent 50%);background-position:calc(100% - 20px) 22px,calc(100% - 15px) 22px;background-size:5px 5px;background-repeat:no-repeat}
+.seg{display:flex;gap:4px;background:#E6EAEE;padding:4px;border-radius:12px}
+.seg button{flex:1;min-height:38px;border:none;border-radius:10px;background:transparent;color:var(--muted);font-size:13px;font-weight:500;cursor:pointer}
+.seg button.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(14,27,44,.15)}
+.hero{background:var(--ink);color:#fff;border-radius:24px;padding:20px;display:flex;flex-direction:column;gap:14px}
+.hero .v{margin:4px 0 0;font-size:54px;line-height:1;letter-spacing:-1.5px}
+.stack{display:flex;height:10px;border-radius:99px;overflow:hidden;gap:2px;background:#22334A}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px}
+.legend div{display:flex;align-items:center;gap:8px;font-size:12px;color:#CBD5E1}
+.legend b{color:#fff;margin-left:auto;font-weight:600}
+.dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+nav.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:calc(76px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid var(--line);display:flex;justify-content:space-around;align-items:flex-start;padding:8px 6px 0;z-index:20}
+nav.tabs a{width:64px;min-height:48px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);text-decoration:none;font-size:11px;font-weight:500}
+nav.tabs a.on{color:var(--teal);font-weight:600}
+nav.tabs a.plus{width:58px;height:58px;margin-top:-24px;border-radius:29px;background:var(--teal);color:#fff;justify-content:center;box-shadow:0 6px 16px rgba(15,118,110,.35)}
+.sheet-bg{position:fixed;inset:0;background:rgba(14,27,44,.45);z-index:40;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--bg);width:100%;max-width:480px;max-height:92vh;overflow:auto;border-radius:24px 24px 0 0;padding:18px 18px calc(env(safe-area-inset-bottom) + 18px);display:flex;flex-direction:column;gap:12px}
+.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;z-index:60;max-width:90%}
+.note{font-size:13px;border-radius:12px;padding:10px 12px;margin:0}
+.note.blue{background:var(--blue-soft);color:var(--blue-ink)}
+.note.amber{background:#FFFBEB;color:#78350F;border:1px solid #FDE68A}
+.note.green{background:#ECFDF5;color:#065F46;border:1px solid #A7F3D0}
+.badge{font-size:10px;font-weight:700;color:#7C2D12;background:#FFEDD5;padding:2px 6px;border-radius:6px;margin-left:6px;letter-spacing:.3px;vertical-align:middle}
+.rank{width:24px;height:24px;border-radius:12px;background:#E6EAEE;color:var(--muted);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.rank.on{background:var(--ink);color:#fff}
+.login{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:32px 24px;gap:16px}
+.logo{width:64px;height:64px;border-radius:18px;overflow:hidden;box-shadow:0 0 0 1px var(--line)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:99px;padding:7px 12px;font-size:13px;cursor:pointer}
+.chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.empty{text-align:center;color:var(--muted);font-size:14px;padding:16px 8px}
+@media (prefers-color-scheme: dark){
+  :root{--ink:#E8EDF3;--muted:#9AA6B4;--line:#26313F;--bg:#0B121C;--card:#131C28;--teal:#2DD4BF;--teal-soft:#0F3B37;--amber:#F59E0B;--amber-soft:#3A2A0C;--blue-soft:#172554;--blue-ink:#BFDBFE}
+  .hero{background:#18273A}
+  .btn{color:#0B121C}
+  .btn.sec,.btn.danger,.input,.chip,nav.tabs,.seg button.on{background:#131C28}
+  .seg{background:#1C2735}
+  .chip.on{background:#E8EDF3;color:#0B121C}
+  .note.amber{background:#2A1F0A;color:#FCD34D;border-color:#4A3510}
+  .note.green{background:#0B2A22;color:#A7F3D0;border-color:#14532D}
+  .rank.on{background:#E8EDF3;color:#0B121C}
+  .bar{background:#22303F}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+'use strict';
+/* =========================================================
+   Vida Tranquila — app de finanças pessoais (v1)
+   Tudo corre no telemóvel. Dados encriptados (AES-GCM) com
+   chave derivada da palavra-passe (PBKDF2). Sem servidores.
+   ========================================================= */
+const APP_VERSION = '1.2.0';
+const STORE_KEY = 'vt_vault_v1';
+const LOCK_AFTER_MS = 2 * 60 * 1000;
+
+/* ---------- Regras fiscais (editáveis em Definições) ---------- */
+const DEFAULT_RULES = {
+  ano: 2026,
+  versao: '2026.1',
+  ivaTaxa: 0.23,
+  ssTaxa: 0.214,
+  ssCoeficiente: 0.70,
+  // prazos: mês (1-12) e dia; "ultimo" = último dia do mês
+  prazos: [
+    { id:'ss_t4', nome:'Declaração trimestral SS', ref:'out–dez', mes:1, dia:'ultimo', tipo:'ss' },
+    { id:'iva_t4_d', nome:'Declaração do IVA', ref:'4.º trimestre', mes:2, dia:20, tipo:'iva' },
+    { id:'iva_t4_p', nome:'Pagar IVA', ref:'4.º trimestre', mes:2, dia:25, tipo:'iva_pag' },
+    { id:'ss_t1', nome:'Declaração trimestral SS', ref:'jan–mar', mes:4, dia:'ultimo', tipo:'ss' },
+    { id:'iva_t1_d', nome:'Declaração do IVA', ref:'1.º trimestre', mes:5, dia:20, tipo:'iva' },
+    { id:'iva_t1_p', nome:'Pagar IVA', ref:'1.º trimestre', mes:5, dia:25, tipo:'iva_pag' },
+    { id:'ss_t2', nome:'Declaração trimestral SS', ref:'abr–jun', mes:7, dia:'ultimo', tipo:'ss' },
+    { id:'iva_t2_d', nome:'Declaração do IVA', ref:'2.º trimestre', mes:8, dia:20, tipo:'iva' },
+    { id:'iva_t2_p', nome:'Pagar IVA', ref:'2.º trimestre', mes:8, dia:25, tipo:'iva_pag' },
+    { id:'ss_t3', nome:'Declaração trimestral SS', ref:'jul–set', mes:10, dia:'ultimo', tipo:'ss' },
+    { id:'iva_t3_d', nome:'Declaração do IVA', ref:'3.º trimestre', mes:11, dia:20, tipo:'iva' },
+    { id:'iva_t3_p', nome:'Pagar IVA', ref:'3.º trimestre', mes:11, dia:25, tipo:'iva_pag' },
+    { id:'irs', nome:'Entrega do IRS', ref:'ano anterior', mes:6, dia:30, tipo:'irs' }
+  ],
+  fontes: {
+    iva: 'https://info.portaldasfinancas.gov.pt/pt/apoio_contribuinte/calendario_fiscal/Pages/obrigacoes_fiscais.aspx',
+    ss: 'https://www.seg-social.pt/trabalhadores-independentes'
+  },
+  nota: 'Datas pela regra geral. Confirma no início de cada ano: em alguns anos há ajustes (fins de semana, feriados).'
+};
+
+const DEFAULT_CATEGORIES = [
+  { nome:'Casa (conta conjunta)', orc:500, kw:['conta conjunta','casa','luz','agua','água','gas','gás','renda','condominio','condomínio'] },
+  { nome:'Supermercado', orc:320, kw:['supermercado','continente','pingo','lidl','mercadona','aldi','minipreco','minipreço','intermarche','intermarché','auchan','compras'] },
+  { nome:'Transporte', orc:180, kw:['gasolina','gasoleo','gasóleo','combustivel','combustível','via verde','portagem','uber','bolt','comboio','metro','estacionamento','oficina','pneus'] },
+  { nome:'Comer fora', orc:100, kw:['restaurante','jantar','almoço','almoco','cafe','café','take','pizza','sushi','bar','pastelaria'] },
+  { nome:'Subscrições', orc:40, kw:['netflix','spotify','icloud','youtube','disney','hbo','prime','chatgpt','claude','apple'] },
+  { nome:'Lazer', orc:60, kw:['cinema','climbup','escalada','surf','concerto','livro','jogo','ginasio','ginásio'] },
+  { nome:'Saúde', orc:40, kw:['farmacia','farmácia','medico','médico','dentista','analises','análises','consulta','fisio'] },
+  { nome:'Bem-estar', orc:30, kw:['cabeleireiro','barbeiro','wells','massagem'] },
+  { nome:'Manel', orc:300, kw:['manel','escola','creche','brinquedo','fraldas'] },
+  { nome:'Atividade profissional', orc:50, kw:['material','seguro acidentes','contabilista','formação','formacao','equipamento'] },
+  { nome:'Impostos', orc:0, kw:['iva','seguranca social','segurança social','irs','finanças','financas','coima'] },
+  { nome:'Viagens', orc:0, kw:['viagem','hotel','airbnb','voo','ryanair','tap'] },
+  { nome:'Outros', orc:50, kw:[] }
+];
+
+/* ---------- Utilitários ---------- */
+const $ = (s, el=document) => el.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = new Intl.NumberFormat('pt-PT', { style:'currency', currency:'EUR' });
+const fmt0 = new Intl.NumberFormat('pt-PT', { style:'currency', currency:'EUR', maximumFractionDigits:0 });
+const eur = v => fmt.format(Math.round((v||0)*100)/100);
+const eur0 = v => fmt0.format(Math.round(v||0));
+const r2 = v => Math.round((v||0)*100)/100;
+const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
+const pad = n => String(n).padStart(2,'0');
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const today = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+const monthKey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}`;
+const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const MES3 = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const DIAS = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+const parseNum = s => { if (s === '' || s == null) return NaN; return parseFloat(String(s).replace(/\s/g,'').replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.')); };
+const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+const lastDay = (y,m) => new Date(y, m, 0).getDate(); // m 1-12
+const daysLeftInMonth = () => { const t = today(); return lastDay(t.getFullYear(), t.getMonth()+1) - t.getDate() + 1; };
+const shortDate = isoStr => { const [y,m,d] = isoStr.split('-').map(Number); return `${d} ${MES3[m-1]}`; };
+
+const ICONS = {
+  home:'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
+  cal:'<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+  doc:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  x:'<path d="M6 6l12 12M18 6L6 18"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  chev:'<path d="M9 6l6 6-6 6"/>',
+  chevl:'<path d="M15 6l-6 6 6 6"/>',
+  lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  up:'<path d="M7 14l5-5 5 5"/>',
+  check:'<path d="M5 12l5 5L20 7"/>',
+  trash:'<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'
+};
+const ic = (n, size=22, sw=1.8) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
+
+/* ---------- Encriptação ---------- */
+const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function deriveKey(pass, salt, iter){
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name:'PBKDF2', salt, iterations:iter, hash:'SHA-256' }, base, { name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']);
+}
+async function encryptJSON(key, obj){
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name:'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
+  return { iv:b64(iv), ct:b64(ct) };
+}
+async function decryptJSON(key, box){
+  const pt = await crypto.subtle.decrypt({ name:'AES-GCM', iv:unb64(box.iv) }, key, unb64(box.ct));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+
+/* Chave dos dados (aleatória) guardada duas vezes: com a palavra-passe e com o código de recuperação */
+const RC_ALPHA = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+const rand16 = () => crypto.getRandomValues(new Uint8Array(16));
+function newRecoveryCode(){
+  let out = '';
+  while (out.length < 24){ for (const x of crypto.getRandomValues(new Uint8Array(32))){ if (x < 248 && out.length < 24) out += RC_ALPHA[x % 31]; } }
+  return out.match(/.{4}/g).join('-');
+}
+const normCode = c => String(c || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+async function encBytes(key, bytes){ const iv = crypto.getRandomValues(new Uint8Array(12)); const ct = await crypto.subtle.encrypt({ name:'AES-GCM', iv }, key, bytes); return { iv:b64(iv), ct:b64(ct) }; }
+async function decBytes(key, box){ return new Uint8Array(await crypto.subtle.decrypt({ name:'AES-GCM', iv:unb64(box.iv) }, key, unb64(box.ct))); }
+const importDEK = raw => crypto.subtle.importKey('raw', raw, { name:'AES-GCM' }, false, ['encrypt','decrypt']);
+async function newVaultKeys(pass){
+  const raw = crypto.getRandomValues(new Uint8Array(32)); const iter = 310000;
+  const saltP = rand16(), saltR = rand16(); const code = newRecoveryCode();
+  const wrapP = await encBytes(await deriveKey(pass, saltP, iter), raw);
+  const wrapR = await encBytes(await deriveKey(normCode(code), saltR, iter), raw);
+  DEK_RAW = raw; KEY = await importDEK(raw);
+  return { fields:{ v:2, iter, saltP:b64(saltP), wrapP, saltR:b64(saltR), wrapR }, code };
+}
+async function openWithPass(vault, pass){
+  if (vault.v === 2){
+    const raw = await decBytes(await deriveKey(pass, unb64(vault.saltP), vault.iter), vault.wrapP);
+    const key = await importDEK(raw);
+    return { key, raw, data: vault.ct ? await decryptJSON(key, vault) : null };
+  }
+  const key = await deriveKey(pass, unb64(vault.salt), vault.iter);
+  return { key, raw:null, data: await decryptJSON(key, vault), legacy:true };
+}
+async function openWithCode(vault, code){
+  if (vault.v !== 2) throw new Error('sem código');
+  const raw = await decBytes(await deriveKey(normCode(code), unb64(vault.saltR), vault.iter), vault.wrapR);
+  const key = await importDEK(raw);
+  return { key, raw, data: vault.ct ? await decryptJSON(key, vault) : null };
+}
+async function rewrapPass(pass){
+  const saltP = rand16();
+  VAULT = { ...VAULT, saltP:b64(saltP), wrapP: await encBytes(await deriveKey(pass, saltP, VAULT.iter), DEK_RAW) };
+}
+async function newCodeForVault(){
+  const code = newRecoveryCode(); const saltR = rand16();
+  VAULT = { ...VAULT, saltR:b64(saltR), wrapR: await encBytes(await deriveKey(normCode(code), saltR, VAULT.iter), DEK_RAW) };
+  return code;
+}
+
+/* ---------- Estado ---------- */
+let S = null;          // dados desencriptados (só em memória)
+let KEY = null;        // chave AES dos dados
+let DEK_RAW = null;    // a mesma chave em bruto (só em memória), para a voltar a guardar
+let VAULT = null;      // { salt, iter, iv, ct }
+let saveTimer = null;
+let hiddenAt = 0;
+
+/* Armazenamento: IndexedDB (sem limite prático); localStorage só como recurso */
+const IDB_NAME = 'vida-tranquila', IDB_STORE = 'kv';
+let idbP = null;
+function idb(){
+  if (!idbP) idbP = new Promise((res, rej) => {
+    if (!('indexedDB' in window)) { rej(new Error('sem IndexedDB')); return; }
+    const r = indexedDB.open(IDB_NAME, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(IDB_STORE);
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+  return idbP;
+}
+async function idbGet(k){ const db = await idb(); return new Promise((res, rej) => { const t = db.transaction(IDB_STORE).objectStore(IDB_STORE).get(k); t.onsuccess = () => res(t.result); t.onerror = () => rej(t.error); }); }
+async function idbSet(k, v){ const db = await idb(); return new Promise((res, rej) => { const tx = db.transaction(IDB_STORE, 'readwrite'); tx.objectStore(IDB_STORE).put(v, k); tx.oncomplete = () => res(true); tx.onerror = () => rej(tx.error); }); }
+async function idbDel(k){ const db = await idb(); return new Promise(res => { const tx = db.transaction(IDB_STORE, 'readwrite'); tx.objectStore(IDB_STORE).delete(k); tx.oncomplete = () => res(true); tx.onerror = () => res(false); }); }
+const lsGet = () => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch(e){ return null; } };
+async function readVault(){
+  try {
+    let v = await idbGet('vault');
+    if (!v){ const old = lsGet(); if (old){ await idbSet('vault', old); v = old; try { localStorage.removeItem(STORE_KEY); } catch(e){} } }
+    return v || null;
+  } catch(e){ return lsGet(); }
+}
+let writeQ = Promise.resolve();
+function writeVault(v){
+  const copy = JSON.parse(JSON.stringify(v));
+  writeQ = writeQ.then(() => idbSet('vault', copy)).catch(() => {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(copy)); } catch(e){ toast('Não foi possível guardar neste dispositivo.'); }
+  });
+  return writeQ;
+}
+async function wipeVault(){ try { await idbDel('vault'); } catch(e){} try { localStorage.removeItem(STORE_KEY); } catch(e){} }
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+const isStandalone = () => window.navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+function freshState(){
+  return {
+    v: 1,
+    criado: iso(today()),
+    settings: { saldoInicial: 0, mesBase: 0, reforcoDivida: 0, valorFuturo: 0, irsPct: 15, estrategia: 'estado_juro', investimentosValor: 0, regrasUrl: '', ultimaCopia: '', ocultarInstalar: false },
+    rules: JSON.parse(JSON.stringify(DEFAULT_RULES)),
+    categories: JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
+    fixas: [],     // { id, nome, valor, dia, cat, detalhe }
+    debts: [],     // { id, nome, tipo, saldo, taeg, prestacao, dia, nota }
+    goals: [       // fase: 1 = agora, 2 = depois das dívidas
+      { id:'emerg', nome:'Fundo de emergência', saldo:0, alvo:0, mensal:0, fase:1, pct:0, tipo:'emergencia' },
+      { id:'reserva', nome:'Reserva de rendimento', saldo:0, alvo:0, mensal:0, fase:1, pct:0, tipo:'reserva' },
+      { id:'ppr_manel', nome:'PPR do Manel', saldo:0, alvo:0, mensal:0, fase:2, pct:25, tipo:'futuro' },
+      { id:'ppr_joao', nome:'PPR do João', saldo:0, alvo:0, mensal:0, fase:2, pct:35, tipo:'futuro' },
+      { id:'investir', nome:'Para investir (ações)', saldo:0, alvo:0, mensal:0, fase:2, pct:40, tipo:'futuro' }
+    ],
+    movs: []       // { id, data, tipo: despesa|receita|transferencia|divida, valor, cat, desc, fixaId, metaId, dividaId, base, iva, comIva, reservas:{iva,ss,irs} }
+  };
+}
+
+function demoState(){
+  const s = freshState();
+  const t = today(); const y = t.getFullYear(), m = t.getMonth();
+  const d = day => iso(new Date(y, m, Math.min(day, t.getDate())));
+  s.settings = { ...s.settings, saldoInicial: 1450, mesBase: 1800, reforcoDivida: 200, valorFuturo: 200, irsPct: 15 };
+  s.fixas = [
+    { id:uid(), nome:'Conta conjunta (casa)', valor:500, dia:1, cat:'Casa (conta conjunta)', detalhe:'Crédito habitação (minha parte), luz, água, gás' },
+    { id:uid(), nome:'Escola do Manel', valor:300, dia:5, cat:'Manel', detalhe:'' },
+    { id:uid(), nome:'Netflix', valor:13.99, dia:8, cat:'Subscrições', detalhe:'' },
+    { id:uid(), nome:'Spotify', valor:8.99, dia:18, cat:'Subscrições', detalhe:'' },
+    { id:uid(), nome:'iCloud', valor:9.99, dia:20, cat:'Subscrições', detalhe:'' }
+  ];
+  s.debts = [
+    { id:uid(), nome:'Finanças', tipo:'estado', saldo:1100, taeg:0, prestacao:102, dia:20, nota:'Plano prestacional IRS' },
+    { id:uid(), nome:'Segurança Social', tipo:'estado', saldo:600, taeg:0, prestacao:60, dia:20, nota:'Plano prestacional' },
+    { id:uid(), nome:'Cartão de crédito', tipo:'cartao', saldo:1200, taeg:18, prestacao:60, dia:10, nota:'' },
+    { id:uid(), nome:'Crédito pessoal', tipo:'credito', saldo:5150, taeg:9, prestacao:180, dia:15, nota:'' },
+    { id:uid(), nome:'Splitwise', tipo:'splitwise', saldo:450, taeg:0, prestacao:0, dia:0, nota:'Saldo a acertar' }
+  ];
+  const g = id => s.goals.find(x => x.id === id);
+  Object.assign(g('emerg'), { saldo:2400, alvo:6000, mensal:150 });
+  Object.assign(g('reserva'), { saldo:800, alvo:1800, mensal:0 });
+  const casa = s.fixas[0], escola = s.fixas[1], netflix = s.fixas[2];
+  const add = o => s.movs.push({ id:uid(), ...o });
+  add({ data:d(1), tipo:'despesa', valor:500, cat:casa.cat, desc:casa.nome, fixaId:casa.id });
+  add({ data:d(5), tipo:'despesa', valor:300, cat:escola.cat, desc:escola.nome, fixaId:escola.id });
+  add({ data:d(8), tipo:'despesa', valor:13.99, cat:netflix.cat, desc:netflix.nome, fixaId:netflix.id });
+  addReceita(s, { data:d(3), desc:'Recibo Box', base:900, comIva:true });
+  addReceita(s, { data:d(6), desc:'Recibo João Andrade', base:300, comIva:true });
+  add({ data:d(4), tipo:'despesa', valor:62.40, cat:'Supermercado', desc:'Supermercado' });
+  add({ data:d(7), tipo:'despesa', valor:45, cat:'Transporte', desc:'Gasolina' });
+  add({ data:d(9), tipo:'despesa', valor:24.50, cat:'Comer fora', desc:'Jantar' });
+  add({ data:d(10), tipo:'despesa', valor:38.20, cat:'Supermercado', desc:'Continente' });
+  const cc = s.debts[2];
+  add({ data:d(10), tipo:'divida', valor:60, dividaId:cc.id, desc:'Cartão de crédito' });
+  cc.saldo -= 60;
+  return s;
+}
+
+function addReceita(s, { data, desc, base, comIva, cat }){
+  const r = s.rules;
+  const iva = comIva ? r2(base * r.ivaTaxa) : 0;
+  const ss = r2(base * r.ssCoeficiente * r.ssTaxa);
+  const irs = r2(base * (s.settings.irsPct || 0) / 100);
+  const mov = { id:uid(), data, tipo:'receita', valor:r2(base + iva), base:r2(base), iva, comIva:!!comIva, cat: cat || 'Recibos verdes', desc, reservas:{ iva, ss, irs } };
+  s.movs.push(mov);
+  return mov;
+}
+
+async function saveNow(){
+  if (!KEY || !S) return;
+  const box = await encryptJSON(KEY, S);
+  VAULT = { ...VAULT, ...box, app: APP_VERSION, atualizado: new Date().toISOString() };
+  writeVault(VAULT);
+}
+function save(){ clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 150); }
+
+/* ---------- Cálculos ---------- */
+const sum = (arr, f) => arr.reduce((a, x) => a + (f ? f(x) : x), 0);
+const movsMonth = mk => S.movs.filter(m => m.data.slice(0,7) === mk);
+
+function saldoConta(){
+  let s = S.settings.saldoInicial || 0;
+  for (const m of S.movs){
+    if (m.tipo === 'receita') s += m.valor;
+    else s -= m.valor;
+  }
+  return r2(s);
+}
+function taxReserve(){
+  // tudo o que foi reservado nos recibos menos o que já foi pago em impostos
+  const reservado = sum(S.movs.filter(m => m.tipo === 'receita'), m => (m.reservas?.iva||0) + (m.reservas?.ss||0) + (m.reservas?.irs||0));
+  const pago = sum(S.movs.filter(m => m.tipo === 'despesa' && m.cat === 'Impostos'), m => m.valor);
+  return r2(Math.max(0, reservado - pago));
+}
+function taxBreakdown(){
+  const rec = S.movs.filter(m => m.tipo === 'receita');
+  const pagos = S.movs.filter(m => m.tipo === 'despesa' && m.cat === 'Impostos');
+  const tag = k => sum(pagos.filter(p => p.impTipo === k), p => p.valor);
+  const iva = sum(rec, m => m.reservas?.iva||0) - tag('iva');
+  const ss = sum(rec, m => m.reservas?.ss||0) - tag('ss');
+  const irs = sum(rec, m => m.reservas?.irs||0) - tag('irs') - sum(pagos.filter(p => !p.impTipo), p => p.valor);
+  return { iva:r2(Math.max(0,iva)), ss:r2(Math.max(0,ss)), irs:r2(Math.max(0,irs)) };
+}
+function fixaPaidThisMonth(f, mk){ return S.movs.some(m => m.fixaId === f.id && m.data.slice(0,7) === mk); }
+function fixasPendentes(mk = monthKey(today())){ return S.fixas.filter(f => !fixaPaidThisMonth(f, mk)); }
+function activeDebts(){ return S.debts.filter(d => d.saldo > 0.005 && d.tipo !== 'splitwise'); }
+function fase(){ return activeDebts().length ? 1 : 2; }
+function debtPlanPending(mk = monthKey(today())){
+  // prestações agendadas + reforço, menos o que já foi pago em dívidas este mês
+  const deb = activeDebts();
+  const pagoMes = sum(movsMonth(mk).filter(m => m.tipo === 'divida'), m => m.valor);
+  const prest = sum(deb, d => Math.min(d.prestacao || 0, d.saldo + sum(movsMonth(mk).filter(m => m.dividaId === d.id), m => m.valor)));
+  const plano = prest + (deb.length ? (S.settings.reforcoDivida || 0) : 0);
+  return r2(Math.max(0, plano - pagoMes));
+}
+function goalTransfersMonth(goalId, mk){ return sum(movsMonth(mk).filter(m => m.tipo === 'transferencia' && m.metaId === goalId), m => m.valor); }
+function goalMonthly(g){
+  if (g.fase === 2) return fase() === 2 ? r2((S.settings.valorFuturo || 0) * (g.pct || 0) / 100) : 0;
+  return g.mensal || 0;
+}
+function goalsPending(mk = monthKey(today())){
+  return r2(sum(S.goals, g => Math.max(0, goalMonthly(g) - goalTransfersMonth(g.id, mk))));
+}
+function livre(){
+  const mk = monthKey(today());
+  const saldo = saldoConta();
+  const impostos = taxReserve();
+  const fixas = r2(sum(fixasPendentes(mk), f => f.valor));
+  const dividas = fase() === 1 ? debtPlanPending(mk) : 0;
+  const metas = goalsPending(mk);
+  const livre = r2(saldo - impostos - fixas - dividas - metas);
+  return { saldo, impostos, fixas, dividas, metas, livre };
+}
+function monthIncome(mk){ return r2(sum(movsMonth(mk).filter(m => m.tipo === 'receita'), m => m.base ?? m.valor)); }
+function monthSpend(mk){ return r2(sum(movsMonth(mk).filter(m => m.tipo === 'despesa' && m.cat !== 'Impostos'), m => m.valor)); }
+
+function quarterOf(d){ return Math.floor(d.getMonth() / 3) + 1; }
+function quarterRange(y, q){ return [new Date(y, (q-1)*3, 1), new Date(y, q*3, 0)]; }
+
+function sortedDebts(list = S.debts){
+  const strat = S.settings.estrategia;
+  const prio = d => d.tipo === 'estado' ? 0 : (d.tipo === 'splitwise' || d.tipo === 'pessoal') ? 2 : 1;
+  return [...list].sort((a, b) => {
+    if (prio(a) !== prio(b)) return prio(a) - prio(b);
+    if (strat === 'menor') return a.saldo - b.saldo;
+    return (b.taeg||0) - (a.taeg||0) || a.saldo - b.saldo;
+  });
+}
+/* Simulação mês a mês: prestações + reforço, juros mensais, reforço vai para a 1.ª da lista */
+function simulateDebts(extra = 0){
+  let debts = sortedDebts(activeDebts()).map(d => ({ id:d.id, saldo:d.saldo, r:(d.taeg||0)/100/12, p:d.prestacao||0 }));
+  const end = {}; let juros = 0; const reforco = (S.settings.reforcoDivida || 0) + extra;
+  if (!debts.length) return { end, meses:0, juros:0 };
+  let mes = 0;
+  while (debts.some(d => d.saldo > 0.005) && mes < 600){
+    mes++;
+    let pool = reforco;
+    for (const d of debts){
+      if (d.saldo <= 0.005) continue;
+      const j = d.saldo * d.r; juros += j; d.saldo += j;
+      const pay = Math.min(d.p, d.saldo); d.saldo -= pay;
+      if (d.p <= 0 && d.r === 0 && pool <= 0) { /* sem plano */ }
+    }
+    // dívidas que acabaram libertam a prestação para o reforço (efeito bola)
+    pool += sum(debts.filter(d => d.saldo <= 0.005 && end[d.id]), d => d.p);
+    for (const d of debts){
+      if (d.saldo <= 0.005 || pool <= 0) continue;
+      const pay = Math.min(pool, d.saldo); d.saldo -= pay; pool -= pay;
+    }
+    for (const d of debts) if (d.saldo <= 0.005 && !end[d.id]) end[d.id] = mes;
+    if (reforco <= 0 && sum(debts, d => d.p) <= 0) break;
+  }
+  const left = debts.filter(d => d.saldo > 0.005);
+  return { end, meses: left.length ? null : Math.max(0, ...Object.values(end)), juros: r2(juros) };
+}
+function monthsToLabel(n){
+  if (n == null) return 'sem data (falta prestação)';
+  const t = today(); const d = new Date(t.getFullYear(), t.getMonth() + n, 1);
+  return `${MES3[d.getMonth()]} ${d.getFullYear()}`;
+}
+function futureStartLabel(){ const s = simulateDebts(); return s.meses == null ? '—' : monthsToLabel(s.meses + 1); }
+
+/* ---------- Prazos fiscais ---------- */
+function deadlines(fromDate = today(), count = 8){
+  const out = [];
+  const y0 = fromDate.getFullYear();
+  for (const y of [y0, y0+1]){
+    for (const p of S.rules.prazos){
+      const dia = p.dia === 'ultimo' ? lastDay(y, p.mes) : p.dia;
+      const d = new Date(y, p.mes - 1, dia);
+      if (d >= fromDate) out.push({ ...p, date:d, iso:iso(d) });
+    }
+  }
+  out.sort((a,b) => a.date - b.date);
+  return out.slice(0, count);
+}
+function ivaAPagarTrimestre(y, q){
+  const [a, b] = quarterRange(y, q);
+  return r2(sum(S.movs.filter(m => m.tipo === 'receita' && new Date(m.data) >= a && new Date(m.data) <= b), m => m.iva || 0));
+}
+function makeICS(){
+  const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Vida Tranquila//PT','CALSCALE:GREGORIAN'];
+  const stamp = new Date().toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z';
+  for (const p of deadlines(today(), 12)){
+    const ds = p.iso.replace(/-/g,'');
+    const next = new Date(p.date); next.setDate(next.getDate()+1);
+    lines.push('BEGIN:VEVENT', `UID:${p.id}-${ds}@vidatranquila`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${ds}`, `DTEND;VALUE=DATE:${iso(next).replace(/-/g,'')}`,
+      `SUMMARY:${p.nome} (${p.ref})`, 'DESCRIPTION:Lembrete da app Vida Tranquila. Confirma a data no Portal das Finanças / Segurança Social Direta.',
+      'BEGIN:VALARM','TRIGGER:-P5D','ACTION:DISPLAY',`DESCRIPTION:${p.nome} daqui a 5 dias`,'END:VALARM',
+      'BEGIN:VALARM','TRIGGER:-P1D','ACTION:DISPLAY',`DESCRIPTION:${p.nome} amanhã`,'END:VALARM','END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n');
+}
+
+/* ---------- Interpretar texto ("gasolina 45") ---------- */
+function guessCategory(text){
+  const t = norm(text);
+  for (const c of S.categories){
+    for (const k of (c.kw || [])) if (k && t.includes(norm(k))) return c.nome;
+  }
+  // aprende com o histórico: mesma descrição usada antes
+  const prev = [...S.movs].reverse().find(m => m.tipo === 'despesa' && m.desc && t.includes(norm(m.desc)));
+  return prev ? prev.cat : 'Outros';
+}
+function parseQuick(text){
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+  const t = norm(raw);
+  const numMatch = raw.match(/(\d+(?:[.\s]\d{3})*(?:[.,]\d{1,2})?)\s*(?:€|eur|euros)?/gi);
+  let valor = NaN;
+  if (numMatch){ valor = parseNum(numMatch[numMatch.length-1].replace(/€|eur(os)?/i,'')); }
+  let desc = raw.replace(/(\d+(?:[.\s]\d{3})*(?:[.,]\d{1,2})?)\s*(€|eur|euros)?/gi, '').replace(/\b(com|sem)\s+iva\b/gi,'').replace(/\s+/g,' ').trim();
+  const isReceita = /^(recibo|recebi|receita|pagamento de|fatura|factura)\b/.test(t);
+  if (isReceita){
+    const comIva = /\bcom\s+iva\b/.test(t) || (!/\bsem\s+iva\b/.test(t) && /^recibo/.test(t));
+    desc = desc.replace(/^(recebi|receita)\s*/i,'');
+    desc = desc ? desc.charAt(0).toUpperCase() + desc.slice(1) : 'Recibo';
+    return { tipo:'receita', valor, desc, comIva };
+  }
+  desc = desc ? desc.charAt(0).toUpperCase() + desc.slice(1) : '';
+  return { tipo:'despesa', valor, desc, cat: guessCategory(raw) };
+}
+
+/* ---------- UI base ---------- */
+const app = $('#app');
+let route = 'hoje';
+let routeArg = null;
+let mesOffset = 0;
+
+function toast(msg){
+  const el = document.createElement('div'); el.className = 'toast'; el.setAttribute('role','status'); el.textContent = msg;
+  document.body.appendChild(el); setTimeout(() => el.remove(), 2400);
+}
+function tabs(active){
+  const t = (r, icon, label) => `<a href="#${r}" class="${active===r?'on':''}" ${active===r?'aria-current="page"':''}>${ic(icon,24)}<span>${label}</span></a>`;
+  return `<nav class="tabs" aria-label="Navegação principal">${t('hoje','home','Hoje')}${t('mes','cal','Mês')}<a href="#registar" class="plus" aria-label="Novo registo">${ic('plus',26,2.4)}</a>${t('metas','target','Metas')}${t('impostos','doc','Impostos')}</nav>`;
+}
+function go(r, arg){ routeArg = arg ?? null; if (location.hash.slice(1) === r) render(); else location.hash = r; }
+window.addEventListener('hashchange', () => { route = location.hash.slice(1) || 'hoje'; render(); });
+
+function render(){
+  if (!S){ renderLogin(); return; }
+  route = location.hash.slice(1) || 'hoje';
+  const views = { hoje:vHoje, mes:vMes, metas:vMetas, impostos:vImpostos, registar:vRegistar, movimentos:vMovimentos, dividas:vDividas, patrimonio:vPatrimonio, definicoes:vDefinicoes };
+  const fn = views[route] || vHoje;
+  const active = { patrimonio:'metas', dividas:'metas', movimentos:'hoje', definicoes:'hoje' }[route] || route;
+  app.innerHTML = fn() + (route === 'registar' ? '' : tabs(active));
+  window.scrollTo(0,0);
+  const after = AFTER[route]; if (after) after();
+}
+const AFTER = {};
+function bar(pct, color){ const p = Math.max(0, Math.min(100, pct)); return `<div class="bar"><i style="width:${p}%;${color?`background:${color}`:''}"></i></div>`; }
+function backHeader(title, to){
+  return `<div class="row" style="gap:4px"><a href="#${to}" class="iconbtn" aria-label="Voltar" style="margin-left:-12px">${ic('chevl',24)}</a><h1 style="font-size:20px">${esc(title)}</h1></div>`;
+}
+
+/* ---------- Ecrã: Hoje ---------- */
+function vHoje(){
+  const L = livre(); const t = today();
+  const dl = daysLeftInMonth();
+  const segs = [
+    [Math.max(0,L.livre), '#2DD4BF', 'Livre'], [L.impostos, '#F59E0B', 'Impostos'], [L.fixas, '#94A3B8', 'Fixas por pagar'],
+    [L.dividas, '#7DD3FC', 'Dívidas do mês'], [L.metas, '#C4B5FD', 'Metas do mês']
+  ];
+  const total = sum(segs, s => s[0]) || 1;
+  const stack = segs.filter(s => s[0] > 0).map(s => `<i style="flex:${s[0]/total};background:${s[1]}"></i>`).join('');
+  const legend = segs.slice(1).map(s => `<div><span class="dot" style="background:${s[1]}"></span><span>${s[2]}</span><b>${eur0(s[0])}</b></div>`).join('');
+  const next = deadlines(t, 1)[0];
+  const daysTo = next ? Math.round((next.date - t) / 86400000) : 0;
+  const pend = fixasPendentes();
+  const deb = fase() === 1 ? sortedDebts(activeDebts()).filter(d => d.prestacao > 0 && !movsMonth(monthKey(t)).some(m => m.dividaId === d.id)) : [];
+  const recent = [...S.movs].sort((a,b) => b.data.localeCompare(a.data) || 0).slice(0, 5);
+  const neg = L.livre < 0;
+  return `<main class="view">
+  <div class="between">
+    <p class="lbl" style="font-size:14px">${DIAS[t.getDay()]}, ${t.getDate()} de ${MESES[t.getMonth()]}</p>
+    <div class="row" style="gap:6px"><span class="pill ${fase()===1?'blue':'teal'}">${fase()===1?'Fase 1 · Dever menos':'Fase 2 · Construir'}</span>
+    <a href="#definicoes" class="iconbtn" aria-label="Definições" style="margin-right:-10px">${ic('gear',22)}</a></div>
+  </div>
+  <section class="hero" aria-label="Livre para gastar">
+    <div><p style="margin:0;font-size:14px;color:#99F6E4;font-weight:600">Livre para gastar</p>
+    <p class="v num" style="${neg?'color:#FCA5A5':''}">${eur0(L.livre)}</p>
+    <p style="margin:8px 0 0;font-size:13px;color:#CBD5E1">${neg ? 'Estás a usar dinheiro já reservado. Revê as metas ou o reforço deste mês.' : `até ${lastDay(t.getFullYear(), t.getMonth()+1)} ${MES3[t.getMonth()]} · cerca de <strong style="color:#fff">${eur0(L.livre / dl)}/dia</strong>`}</p></div>
+    <div class="stack">${stack}</div>
+    <div class="legend">${legend}</div>
+    <p style="margin:0;font-size:12px;color:#94A3B8">Saldo na conta ${eur0(L.saldo)} · já reservado ${eur0(L.saldo - L.livre)}</p>
+  </section>
+  ${isIOS() && !isStandalone() && !S.settings.ocultarInstalar ? `<section class="note blue" style="display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:16px">
+    <b>Instala a app no ecrã principal</b><span>No Safari: botão Partilhar → “Adicionar ao ecrã principal”. Assim abre como uma app e os dados ficam protegidos (o Safari pode apagar dados de sites que não usas).</span>
+    <button class="btn sm sec" id="hideInstall" style="align-self:flex-start">Já percebi</button></section>` : ''}
+  ${backupDue() ? `<section class="note amber" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:16px">
+    <span style="flex:1"><b>Cópia semanal</b><br>${S.settings.ultimaCopia ? `A última foi a ${shortDate(S.settings.ultimaCopia)}.` : 'Ainda não fizeste nenhuma.'} Guarda-a no iCloud Drive.</span>
+    <button class="btn sm" id="doBackup">Fazer cópia</button></section>` : ''}
+  <form id="quick" class="row" style="gap:8px" autocomplete="off">
+    <label class="sr" for="quickIn">Registo rápido</label>
+    <input id="quickIn" class="input" style="flex:1;height:52px;border-radius:16px" placeholder="ex.: gasolina 45" enterkeyhint="done">
+    <button class="iconbtn" type="submit" aria-label="Registar" style="width:52px;height:52px;border-radius:16px;background:var(--teal-soft);color:var(--teal)">${ic('check',22,2.2)}</button>
+  </form>
+  <div id="quickPrev"></div>
+  ${pend.length || deb.length ? `<section class="card tight" aria-label="Por pagar este mês"><p class="lbl" style="padding-top:10px">Por pagar este mês</p><div class="list">
+    ${pend.map(f => `<div class="item"><div class="grow"><p class="t15">${esc(f.nome)}</p><p class="small muted">dia ${f.dia} · ${esc(f.cat)}</p></div><p class="num" style="font-size:15px">${eur(f.valor)}</p><button class="btn sm sec" data-payfixa="${f.id}">Pago</button></div>`).join('')}
+    ${deb.map(d => `<div class="item"><div class="grow"><p class="t15">${esc(d.nome)}${d.tipo==='estado'?'<span class="badge">ESTADO</span>':''}</p><p class="small muted">prestação · dia ${d.dia||'—'}</p></div><p class="num" style="font-size:15px">${eur(Math.min(d.prestacao,d.saldo))}</p><button class="btn sm sec" data-paydebt="${d.id}">Pago</button></div>`).join('')}
+  </div></section>` : ''}
+  ${next ? `<a href="#impostos" class="card row" style="text-decoration:none;color:inherit">
+    <div style="width:40px;height:40px;border-radius:12px;background:var(--amber-soft);color:var(--amber);display:flex;align-items:center;justify-content:center;flex-shrink:0">${ic('clock',22)}</div>
+    <div class="grow" style="flex:1"><p class="t15" style="margin:0">${esc(next.nome)} · ${esc(next.ref)}</p><p class="small muted" style="margin:2px 0 0">${shortDate(next.iso)} · ${daysTo === 0 ? 'hoje' : daysTo === 1 ? 'amanhã' : `daqui a ${daysTo} dias`}</p>
+    <p class="small" style="margin:4px 0 0;color:var(--teal);font-weight:600">Reservado para impostos: ${eur0(L.impostos)}</p></div>${ic('chev',20)}</a>` : ''}
+  <section class="card tight" aria-label="Últimos movimentos">
+    <div class="between" style="padding-top:10px"><p class="lbl">Últimos movimentos</p><a href="#movimentos" class="small" style="font-weight:600;text-decoration:none">Ver todos</a></div>
+    <div class="list">${recent.length ? recent.map(movRow).join('') : '<p class="empty">Ainda sem registos. Escreve acima, por exemplo “supermercado 32,50”.</p>'}</div>
+  </section>
+  </main>`;
+}
+function movRow(m){
+  const sign = m.tipo === 'receita' ? '+ ' : '− ';
+  const color = m.tipo === 'receita' ? 'color:var(--teal)' : '';
+  const sub = m.tipo === 'receita' ? (m.comIva ? `IVA ${eur(m.iva)} e SS reservados` : 'SS reservada') :
+              m.tipo === 'transferencia' ? `para ${esc(S.goals.find(g => g.id === m.metaId)?.nome || 'meta')}` :
+              m.tipo === 'divida' ? 'pagamento de dívida' : esc(m.cat);
+  return `<button class="item" data-mov="${m.id}" style="width:100%;background:none;border-left:none;border-right:none;border-bottom:none;text-align:left;cursor:pointer;color:inherit"><div class="grow"><p class="t15">${esc(m.desc || m.cat || '—')}</p><p class="small muted">${sub} · ${shortDate(m.data)}</p></div><p class="num" style="font-size:15px;${color}">${sign}${eur(m.valor)}</p></button>`;
+}
+AFTER.hoje = () => {
+  const inp = $('#quickIn'), prev = $('#quickPrev');
+  const show = () => {
+    const p = parseQuick(inp.value);
+    if (!p || isNaN(p.valor)){ prev.innerHTML = ''; return; }
+    prev.innerHTML = p.tipo === 'receita'
+      ? `<p class="note green">Receita · ${esc(p.desc)} · ${eur(p.valor)}${p.comIva ? ' + IVA' : ''} → toca ✓ para ver as reservas</p>`
+      : `<p class="note blue">Despesa · ${esc(p.desc || p.cat)} · <strong>${eur(p.valor)}</strong> · ${esc(p.cat)}</p>`;
+  };
+  inp.addEventListener('input', show);
+  const hi = $('#hideInstall'); if (hi) hi.onclick = () => { S.settings.ocultarInstalar = true; save(); render(); };
+  const db = $('#doBackup'); if (db) db.onclick = exportBackup;
+  $('#quick').addEventListener('submit', e => {
+    e.preventDefault();
+    const p = parseQuick(inp.value);
+    if (!p || isNaN(p.valor) || p.valor <= 0){ go('registar', { text: inp.value }); return; }
+    if (p.tipo === 'receita'){ go('registar', { text: inp.value }); return; }
+    S.movs.push({ id:uid(), data:iso(today()), tipo:'despesa', valor:r2(p.valor), cat:p.cat, desc:p.desc || p.cat });
+    save(); toast(`Registado: ${p.desc || p.cat} ${eur(p.valor)}`); render();
+  });
+  bindMovRows();
+  document.querySelectorAll('[data-payfixa]').forEach(b => b.onclick = () => {
+    const f = S.fixas.find(x => x.id === b.dataset.payfixa);
+    S.movs.push({ id:uid(), data:iso(today()), tipo:'despesa', valor:f.valor, cat:f.cat, desc:f.nome, fixaId:f.id });
+    save(); toast(`${f.nome} marcado como pago`); render();
+  });
+  document.querySelectorAll('[data-paydebt]').forEach(b => b.onclick = () => {
+    const d = S.debts.find(x => x.id === b.dataset.paydebt);
+    payDebt(d, Math.min(d.prestacao, d.saldo)); toast(`Prestação de ${d.nome} registada`); render();
+  });
+};
+function payDebt(d, valor, data = iso(today())){
+  S.movs.push({ id:uid(), data, tipo:'divida', valor:r2(valor), dividaId:d.id, desc:d.nome });
+  d.saldo = r2(d.saldo - valor);
+  save();
+}
+function bindMovRows(){
+  document.querySelectorAll('[data-mov]').forEach(b => b.onclick = () => movSheet(b.dataset.mov));
+}
+function movSheet(id){
+  const m = S.movs.find(x => x.id === id); if (!m) return;
+  const extra = m.tipo === 'receita' ? `<div class="card tight"><div class="list">
+    <div class="item"><p class="grow muted">Valor do serviço</p><p class="t15">${eur(m.base)}</p></div>
+    <div class="item"><p class="grow muted">IVA</p><p class="t15">${eur(m.iva)}</p></div>
+    <div class="item"><p class="grow muted">Reservado SS</p><p class="t15">${eur(m.reservas?.ss)}</p></div>
+    <div class="item"><p class="grow muted">Reservado IRS</p><p class="t15">${eur(m.reservas?.irs)}</p></div></div></div>` : '';
+  openSheet(`<div class="between"><h2>${esc(m.desc || m.cat)}</h2><button class="iconbtn" data-close aria-label="Fechar">${ic('x')}</button></div>
+    <p class="num big" style="margin:0">${m.tipo==='receita'?'+':'−'} ${eur(m.valor)}</p>
+    <p class="muted" style="margin:0">${shortDate(m.data)} · ${esc({despesa:'Despesa',receita:'Receita',transferencia:'Transferência para meta',divida:'Pagamento de dívida'}[m.tipo])}${m.cat ? ' · ' + esc(m.cat) : ''}</p>
+    ${extra}
+    ${m.tipo==='despesa' ? `<label class="field"><span>Categoria</span><select class="input" id="mvCat">${S.categories.map(c => `<option ${c.nome===m.cat?'selected':''}>${esc(c.nome)}</option>`).join('')}</select></label>` : ''}
+    <button class="btn danger" id="mvDel">${ic('trash',18)} Apagar registo</button>`, sh => {
+      const sel = $('#mvCat', sh); if (sel) sel.onchange = () => { m.cat = sel.value; save(); toast('Categoria alterada'); };
+      $('#mvDel', sh).onclick = async () => {
+        if (!await ask('Apagar este registo?', { ok:'Apagar', danger:true })) return;
+        if (m.tipo === 'divida'){ const d = S.debts.find(x => x.id === m.dividaId); if (d) d.saldo = r2(d.saldo + m.valor); }
+        if (m.tipo === 'transferencia'){ const g = S.goals.find(x => x.id === m.metaId); if (g) g.saldo = r2(g.saldo - m.valor); }
+        S.movs = S.movs.filter(x => x.id !== m.id); save(); closeSheet(); render();
+      };
+    }, () => render());
+}
+
+/* ---------- Sheet / formulários ---------- */
+let sheetOnClose = null;
+function openSheet(html, bind, onClose){
+  closeSheet(true);
+  const bg = document.createElement('div'); bg.className = 'sheet-bg'; bg.id = 'sheetBg';
+  bg.innerHTML = `<div class="sheet" role="dialog" aria-modal="true">${html}</div>`;
+  document.body.appendChild(bg);
+  sheetOnClose = onClose || null;
+  bg.addEventListener('click', e => { if (e.target === bg || e.target.closest('[data-close]')) closeSheet(); });
+  if (bind) bind(bg.firstElementChild);
+  const f = bg.querySelector('input,select,textarea'); if (f && !f.dataset.nofocus) setTimeout(() => f.focus(), 50);
+}
+function closeSheet(silent){
+  const bg = $('#sheetBg'); if (bg) bg.remove();
+  const cb = sheetOnClose; sheetOnClose = null;
+  if (!silent && cb) cb();
+}
+/* Diálogo próprio (substitui confirm/prompt do sistema) */
+function ask(msg, { input = null, ok = 'Confirmar', danger = false, placeholder = '', value = '' } = {}){
+  return new Promise(resolve => {
+    let done = false;
+    const finish = v => { if (done) return; done = true; closeSheet(true); resolve(v); };
+    openSheet(`<p style="margin:0;font-size:16px;white-space:pre-line">${esc(msg)}</p>
+      ${input ? `<input class="input" id="askIn" type="${input}" placeholder="${esc(placeholder)}" value="${esc(value)}" autocomplete="off">` : ''}
+      <button class="btn ${danger ? 'danger' : ''}" id="askOk">${esc(ok)}</button>
+      <button class="btn sec" id="askNo">Cancelar</button>`, sh => {
+        $('#askOk', sh).onclick = () => finish(input ? $('#askIn', sh).value : true);
+        $('#askNo', sh).onclick = () => finish(input ? null : false);
+        const i = $('#askIn', sh); if (i) i.onkeydown = e => { if (e.key === 'Enter') finish(i.value); };
+      }, () => finish(input ? null : false));
+  });
+}
+/* fields: [{k,label,type:'text'|'num'|'select'|'date'|'textarea', options, value, hint}] */
+function formSheet(title, fields, onSave, onDelete){
+  const f = fields.map(x => {
+    const id = 'f_' + x.k;
+    if (x.type === 'select') return `<label class="field"><span>${esc(x.label)}</span><select class="input" id="${id}">${x.options.map(o => { const [v,l] = Array.isArray(o)?o:[o,o]; return `<option value="${esc(v)}" ${String(v)===String(x.value)?'selected':''}>${esc(l)}</option>`; }).join('')}</select>${x.hint?`<small class="muted">${esc(x.hint)}</small>`:''}</label>`;
+    if (x.type === 'textarea') return `<label class="field"><span>${esc(x.label)}</span><textarea class="input" id="${id}" style="height:90px;padding:12px">${esc(x.value ?? '')}</textarea></label>`;
+    const type = x.type === 'num' ? 'text' : (x.type || 'text');
+    const mode = x.type === 'num' ? 'inputmode="decimal"' : '';
+    const val = x.type === 'num' && x.value != null && x.value !== '' ? String(x.value).replace('.', ',') : (x.value ?? '');
+    return `<label class="field"><span>${esc(x.label)}</span><input class="input" id="${id}" type="${type}" ${mode} value="${esc(val)}" ${x.placeholder?`placeholder="${esc(x.placeholder)}"`:''}>${x.hint?`<small class="muted">${esc(x.hint)}</small>`:''}</label>`;
+  }).join('');
+  openSheet(`<div class="between"><h2>${esc(title)}</h2><button class="iconbtn" data-close aria-label="Fechar">${ic('x')}</button></div>${f}
+    <button class="btn" id="fSave">Guardar</button>${onDelete ? `<button class="btn danger" id="fDel">Apagar</button>` : ''}`, sh => {
+      $('#fSave', sh).onclick = () => {
+        const out = {};
+        for (const x of fields){
+          const el = $('#f_' + x.k, sh); let v = el.value;
+          if (x.type === 'num'){ v = v.trim() === '' ? 0 : parseNum(v); if (isNaN(v)){ toast(`Valor inválido em “${x.label}”`); el.focus(); return; } }
+          out[x.k] = v;
+        }
+        if (onSave(out) !== false){ save(); closeSheet(); render(); }
+      };
+      if (onDelete) $('#fDel', sh).onclick = async () => { if (await ask(`Apagar “${title}”?`, { ok:'Apagar', danger:true })){ onDelete(); save(); render(); } };
+    });
+}
+
+/* ---------- Ecrã: Registar ---------- */
+let REG = null;
+function vRegistar(){
+  const arg = routeArg || {};
+  if (!REG || arg.text !== undefined || arg.tipo){
+    REG = { tipo: arg.tipo || 'despesa', text: arg.text || '', metaId: arg.metaId || '', dividaId: arg.dividaId || '' };
+    const p = parseQuick(REG.text); if (p && !arg.tipo) REG.tipo = p.tipo;
+    routeArg = null;
+  }
+  const tipos = [['despesa','Despesa'],['receita','Receita'],['transferencia','Para meta'],['divida','Dívida']];
+  return `<main class="view" style="padding-bottom:calc(env(safe-area-inset-bottom) + 24px)">
+  <div class="between"><a href="#hoje" class="iconbtn" aria-label="Fechar" style="margin-left:-10px">${ic('x',24)}</a><h2 style="font-size:17px">Novo registo</h2><span style="width:44px"></span></div>
+  <div class="seg" role="group" aria-label="Tipo de movimento">${tipos.map(([k,l]) => `<button type="button" data-tipo="${k}" class="${REG.tipo===k?'on':''}" aria-pressed="${REG.tipo===k}">${l}</button>`).join('')}</div>
+  <div id="regBody" style="display:flex;flex-direction:column;gap:12px"></div>
+  </main>`;
+}
+AFTER.registar = () => {
+  document.querySelectorAll('[data-tipo]').forEach(b => b.onclick = () => { REG.tipo = b.dataset.tipo; render(); });
+  const body = $('#regBody');
+  const t = REG.tipo;
+  const dateField = `<label class="field"><span>Data</span><input class="input" type="date" id="rData" value="${iso(today())}"></label>`;
+  if (t === 'despesa' || t === 'receita'){
+    body.innerHTML = `
+      <label class="field"><span>Escreve ou dita (microfone do teclado)</span>
+      <input class="input" id="rText" style="border:2px solid var(--teal);height:56px;border-radius:16px" value="${esc(REG.text)}" placeholder="${t==='receita'?'ex.: recibo João Andrade 300 com IVA':'ex.: supermercado 62,40'}" autocomplete="off"></label>
+      <div class="grid2">
+        <label class="field"><span>${t==='receita'?'Valor do serviço (sem IVA)':'Valor'}</span><input class="input" id="rValor" inputmode="decimal" placeholder="0,00"></label>
+        ${t==='despesa' ? `<label class="field"><span>Categoria</span><select class="input" id="rCat">${S.categories.map(c => `<option>${esc(c.nome)}</option>`).join('')}</select></label>`
+                         : `<label class="field"><span>IVA</span><select class="input" id="rIva"><option value="1">Com IVA ${Math.round(S.rules.ivaTaxa*100)}%</option><option value="0">Sem IVA / isento</option></select></label>`}
+      </div>
+      <label class="field"><span>Descrição</span><input class="input" id="rDesc" placeholder="${t==='receita'?'ex.: Recibo João Andrade':'ex.: Gasolina'}"></label>
+      ${t==='despesa' && S.categories.find(c=>c.nome==='Impostos') ? `<label class="field" id="impWrap" style="display:none"><span>Que imposto estás a pagar?</span><select class="input" id="rImp"><option value="iva">IVA</option><option value="ss">Segurança Social</option><option value="irs">IRS</option><option value="">Outro (coima, etc.)</option></select></label>` : ''}
+      ${dateField}
+      <div id="rPreview"></div>
+      <button class="btn" id="rSave">Guardar</button>`;
+    const text = $('#rText'), valor = $('#rValor'), desc = $('#rDesc');
+    const cat = $('#rCat'), ivaSel = $('#rIva'), impWrap = $('#impWrap');
+    let touched = { valor:false, desc:false, cat:false };
+    valor.oninput = () => { touched.valor = true; preview(); };
+    desc.oninput = () => { touched.desc = true; };
+    if (cat) cat.onchange = () => { touched.cat = true; if (impWrap) impWrap.style.display = cat.value === 'Impostos' ? '' : 'none'; };
+    if (ivaSel) ivaSel.onchange = preview;
+    const fromText = () => {
+      REG.text = text.value;
+      const p = parseQuick(text.value); if (!p) { preview(); return; }
+      if (!touched.valor && !isNaN(p.valor)) valor.value = String(p.valor).replace('.', ',');
+      if (!touched.desc && p.desc) desc.value = p.desc;
+      if (cat && !touched.cat && p.cat){ cat.value = p.cat; if (impWrap) impWrap.style.display = p.cat === 'Impostos' ? '' : 'none'; }
+      if (ivaSel && p.tipo === 'receita') ivaSel.value = p.comIva ? '1' : '0';
+      preview();
+    };
+    function preview(){
+      const pv = $('#rPreview'); const v = parseNum(valor.value);
+      if (t !== 'receita' || isNaN(v) || v <= 0){ pv.innerHTML = ''; return; }
+      const r = S.rules; const comIva = ivaSel.value === '1';
+      const iva = comIva ? r2(v * r.ivaTaxa) : 0, ss = r2(v * r.ssCoeficiente * r.ssTaxa), irs = r2(v * (S.settings.irsPct||0) / 100);
+      pv.innerHTML = `<section class="note amber" style="display:flex;flex-direction:column;gap:8px;padding:14px">
+        <strong>A app põe de lado automaticamente</strong>
+        <div class="between"><span>Total recebido</span><b>${eur(v + iva)}</b></div>
+        <div class="between"><span>IVA (fundo IVA)</span><b>${eur(iva)}</b></div>
+        <div class="between"><span>Segurança Social · ${eur(v)} × ${Math.round(r.ssCoeficiente*100)}% × ${String(r2(r.ssTaxa*100)).replace('.',',')}%</span><b>${eur(ss)}</b></div>
+        <div class="between"><span>IRS · ${S.settings.irsPct}% definido por ti</span><b>${eur(irs)}</b></div>
+        <div class="between" style="border-top:1px solid #FDE68A;padding-top:8px;color:var(--teal);font-size:15px"><span><b>Fica para ti</b></span><b>${eur(v - ss - irs)}</b></div>
+        <small>Regras fiscais ${esc(r.versao)}</small></section>`;
+    }
+    text.oninput = fromText;
+    fromText();
+    $('#rSave').onclick = () => {
+      const v = parseNum(valor.value);
+      if (isNaN(v) || v <= 0){ toast('Indica um valor'); valor.focus(); return; }
+      const data = $('#rData').value || iso(today());
+      if (t === 'receita'){
+        addReceita(S, { data, desc: desc.value.trim() || 'Recibo', base:v, comIva: ivaSel.value === '1' });
+        toast('Receita registada e reservas feitas');
+      } else {
+        const m = { id:uid(), data, tipo:'despesa', valor:r2(v), cat:cat.value, desc: desc.value.trim() || cat.value };
+        if (cat.value === 'Impostos' && $('#rImp')) m.impTipo = $('#rImp').value;
+        S.movs.push(m); toast('Despesa registada');
+      }
+      REG = null; save(); go('hoje');
+    };
+    return;
+  }
+  if (t === 'transferencia'){
+    const goals = S.goals.filter(g => g.fase === 1 || fase() === 2);
+    body.innerHTML = `<p class="note blue">Dinheiro que sai da conta para uma meta (fundo de emergência, reserva, PPR, investir). Não conta como gasto.</p>
+      <label class="field"><span>Meta</span><select class="input" id="tMeta">${goals.map(g => `<option value="${g.id}" ${g.id===REG.metaId?'selected':''}>${esc(g.nome)}</option>`).join('')}</select></label>
+      <label class="field"><span>Valor</span><input class="input" id="tValor" inputmode="decimal" placeholder="0,00"></label>
+      ${dateField}<button class="btn" id="tSave">Guardar</button>`;
+    const sync = () => { const g = S.goals.find(x => x.id === $('#tMeta').value); const p = g ? Math.max(0, goalMonthly(g) - goalTransfersMonth(g.id, monthKey(today()))) : 0; if (p > 0) $('#tValor').value = String(p).replace('.', ','); };
+    $('#tMeta').onchange = sync; sync();
+    $('#tSave').onclick = () => {
+      const v = parseNum($('#tValor').value); if (isNaN(v) || v <= 0){ toast('Indica um valor'); return; }
+      const g = S.goals.find(x => x.id === $('#tMeta').value);
+      S.movs.push({ id:uid(), data:$('#rData').value || iso(today()), tipo:'transferencia', valor:r2(v), metaId:g.id, desc:g.nome });
+      g.saldo = r2((g.saldo||0) + v); REG = null; save(); toast(`${eur(v)} para ${g.nome}`); go('metas');
+    };
+    return;
+  }
+  if (t === 'divida'){
+    const debts = sortedDebts(S.debts.filter(d => d.saldo > 0.005));
+    if (!debts.length){ body.innerHTML = `<p class="empty">Não tens dívidas registadas.</p><a class="btn sec" href="#dividas" style="display:flex;align-items:center;justify-content:center;text-decoration:none">Adicionar dívida</a>`; return; }
+    body.innerHTML = `<p class="note blue">Pagamento que baixa uma dívida (prestação, reforço ou acerto do Splitwise). Não conta como gasto do mês.</p>
+      <label class="field"><span>Dívida</span><select class="input" id="dSel">${debts.map(d => `<option value="${d.id}" ${d.id===REG.dividaId?'selected':''}>${esc(d.nome)} · falta ${eur(d.saldo)}</option>`).join('')}</select></label>
+      <label class="field"><span>Valor</span><input class="input" id="dValor" inputmode="decimal" placeholder="0,00"></label>
+      ${dateField}<button class="btn" id="dSave">Guardar</button>`;
+    const sync = () => { const d = S.debts.find(x => x.id === $('#dSel').value); if (d && d.prestacao) $('#dValor').value = String(Math.min(d.prestacao, d.saldo)).replace('.', ','); };
+    $('#dSel').onchange = sync; sync();
+    $('#dSave').onclick = () => {
+      const v = parseNum($('#dValor').value); if (isNaN(v) || v <= 0){ toast('Indica um valor'); return; }
+      const d = S.debts.find(x => x.id === $('#dSel').value);
+      payDebt(d, Math.min(v, d.saldo), $('#rData').value || iso(today()));
+      REG = null; toast(d.saldo <= 0.005 ? `${d.nome} está paga!` : `Falta ${eur(d.saldo)} em ${d.nome}`); go('dividas');
+    };
+  }
+};
+
+/* ---------- Ecrã: Movimentos ---------- */
+function vMovimentos(){
+  const q = (routeArg && routeArg.q) || '';
+  const list = [...S.movs].sort((a,b) => b.data.localeCompare(a.data)).filter(m => !q || norm(`${m.desc} ${m.cat}`).includes(norm(q)));
+  const groups = {};
+  for (const m of list){ const k = m.data.slice(0,7); (groups[k] = groups[k] || []).push(m); }
+  return `<main class="view">${backHeader('Movimentos','hoje')}
+  <input class="input" id="mvQ" placeholder="Pesquisar" value="${esc(q)}" aria-label="Pesquisar movimentos">
+  ${Object.keys(groups).length ? Object.entries(groups).map(([k, ms]) => { const [y,mm] = k.split('-').map(Number); return `<section class="card tight"><p class="lbl" style="padding-top:10px;text-transform:capitalize">${MESES[mm-1]} ${y}</p><div class="list">${ms.map(movRow).join('')}</div></section>`; }).join('') : '<p class="empty">Sem movimentos.</p>'}
+  </main>`;
+}
+AFTER.movimentos = () => {
+  bindMovRows();
+  const q = $('#mvQ'); let tm; q.oninput = () => { clearTimeout(tm); tm = setTimeout(() => { routeArg = { q: q.value }; render(); const n = $('#mvQ'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 250); };
+};
+
+/* ---------- Ecrã: Mês ---------- */
+function vMes(){
+  const t = today(); const d = new Date(t.getFullYear(), t.getMonth() + mesOffset, 1); const mk = monthKey(d);
+  const ms = movsMonth(mk).filter(m => m.tipo === 'despesa' && m.cat !== 'Impostos');
+  const gasto = sum(ms, m => m.valor);
+  const fixas = sum(ms.filter(m => m.fixaId), m => m.valor);
+  const orc = sum(S.categories, c => c.orc || 0);
+  const byCat = S.categories.map(c => ({ ...c, v: sum(ms.filter(m => m.cat === c.nome), m => m.valor) })).filter(c => c.v > 0 || c.orc > 0);
+  // média dos 6 meses anteriores por categoria (só meses com registos)
+  const prevKeys = [...Array(6)].map((_, i) => monthKey(new Date(d.getFullYear(), d.getMonth() - 1 - i, 1)));
+  const withData = prevKeys.filter(k => movsMonth(k).length);
+  let insight = '';
+  if (withData.length >= 2){
+    let best = null;
+    for (const c of byCat){
+      const avg = sum(withData, k => sum(movsMonth(k).filter(m => m.tipo === 'despesa' && m.cat === c.nome), m => m.valor)) / withData.length;
+      if (avg > 20 && c.v > avg * 1.15){ const pct = Math.round((c.v / avg - 1) * 100); if (!best || pct > best.pct) best = { nome:c.nome, pct }; }
+    }
+    if (best) insight = `<p class="note blue">${esc(best.nome)} este mês está ${best.pct}% acima da tua média de ${withData.length} meses.</p>`;
+  }
+  const subs = S.fixas.filter(f => f.cat === 'Subscrições');
+  const rec = monthIncome(mk); const base = S.settings.mesBase || 0;
+  const excedente = r2(rec - base);
+  return `<main class="view">
+  <div class="between">
+    <button class="iconbtn" id="mPrev" aria-label="Mês anterior" style="margin-left:-10px">${ic('chevl',22)}</button>
+    <h1 style="font-size:20px;text-transform:capitalize">${MESES[d.getMonth()]} ${d.getFullYear()}</h1>
+    <button class="iconbtn" id="mNext" aria-label="Mês seguinte" style="margin-right:-10px" ${mesOffset>=0?'disabled':''}>${ic('chev',22)}</button>
+  </div>
+  <section class="card" style="display:flex;flex-direction:column;gap:12px">
+    <div class="between" style="align-items:flex-end"><div><p class="lbl">Gasto</p><p class="num big" style="margin:2px 0 0">${eur0(gasto)}</p></div><p class="small muted" style="margin:0 0 6px">orçamento ${eur0(orc)}</p></div>
+    ${bar(orc ? gasto / orc * 100 : 0, gasto > orc ? '#B45309' : 'var(--ink)')}
+    <div class="row small muted" style="gap:16px"><span><b style="color:var(--ink)">${eur0(fixas)}</b> fixas</span><span><b style="color:var(--ink)">${eur0(gasto - fixas)}</b> variáveis</span></div>
+  </section>
+  ${base ? `<section class="card"><div class="between"><div><p class="lbl">Recebido (sem IVA)</p><p class="num" style="font-size:22px;margin:2px 0 0">${eur0(rec)}</p></div><div style="text-align:right"><p class="lbl">Mês base</p><p class="num" style="font-size:22px;margin:2px 0 0">${eur0(base)}</p></div></div>
+    <p class="small" style="margin:10px 0 0;${excedente>=0?'color:var(--teal)':'color:var(--amber)'};font-weight:600">${excedente >= 0 ? `+${eur0(excedente)} acima do mês base → podes passar para a Reserva de rendimento` : `Faltam ${eur0(-excedente)} para o mês base → podes tirar da Reserva de rendimento`}</p></section>` : ''}
+  ${insight}
+  <section class="card" style="display:flex;flex-direction:column;gap:13px" aria-label="Por categoria">
+    <div class="between"><h2>Por categoria</h2><button class="btn sm sec" id="editOrc">Orçamentos</button></div>
+    ${byCat.length ? byCat.map(c => `<div style="display:flex;flex-direction:column;gap:6px"><div class="between" style="font-size:14px"><span style="font-weight:600">${esc(c.nome)}</span><span class="muted"><b style="color:var(--ink)">${eur0(c.v)}</b>${c.orc ? ` de ${eur0(c.orc)}` : ''}</span></div>${bar(c.orc ? c.v / c.orc * 100 : (c.v ? 100 : 0), c.orc && c.v > c.orc ? '#B45309' : '')}</div>`).join('') : '<p class="empty">Sem gastos neste mês.</p>'}
+  </section>
+  <section class="card"><div class="between"><div><p class="t15" style="margin:0">${subs.length} subscriç${subs.length===1?'ão':'ões'}</p><p class="small muted" style="margin:2px 0 0">despesas fixas da categoria Subscrições</p></div>
+    <div style="text-align:right"><p class="t15" style="margin:0">${eur(sum(subs, f => f.valor))}/mês</p><p class="small muted" style="margin:2px 0 0">${eur0(sum(subs, f => f.valor) * 12)} por ano</p></div></div></section>
+  <section class="card"><div class="between"><h2>Despesas fixas</h2><button class="btn sm sec" id="addFixa">+ Adicionar</button></div>
+    <div class="list" style="margin-top:6px">${S.fixas.length ? [...S.fixas].sort((a,b)=>a.dia-b.dia).map(f => `<button class="item" data-fixa="${f.id}" style="width:100%;background:none;border-left:none;border-right:none;border-bottom:none;text-align:left;cursor:pointer;color:inherit"><div class="grow"><p class="t15">${esc(f.nome)}</p><p class="small muted">dia ${f.dia} · ${esc(f.cat)}${f.detalhe ? ' · ' + esc(f.detalhe) : ''}</p></div><p class="num" style="font-size:15px">${eur(f.valor)}</p></button>`).join('') : '<p class="empty">Ex.: conta conjunta, escola, Netflix…</p>'}</div></section>
+  </main>`;
+}
+AFTER.mes = () => {
+  $('#mPrev').onclick = () => { mesOffset--; render(); };
+  $('#mNext').onclick = () => { if (mesOffset < 0){ mesOffset++; render(); } };
+  $('#addFixa').onclick = () => fixaForm();
+  document.querySelectorAll('[data-fixa]').forEach(b => b.onclick = () => fixaForm(S.fixas.find(f => f.id === b.dataset.fixa)));
+  $('#editOrc').onclick = () => formSheet('Orçamento mensal por categoria', S.categories.map((c, i) => ({ k:'c'+i, label:c.nome, type:'num', value:c.orc })), out => { S.categories.forEach((c, i) => c.orc = r2(out['c'+i])); });
+};
+function fixaForm(f){
+  formSheet(f ? 'Editar despesa fixa' : 'Nova despesa fixa', [
+    { k:'nome', label:'Nome', value:f?.nome || '', placeholder:'ex.: Conta conjunta (casa)' },
+    { k:'valor', label:'Valor por mês', type:'num', value:f?.valor ?? '' },
+    { k:'dia', label:'Dia do mês em que sai', type:'num', value:f?.dia ?? 1 },
+    { k:'cat', label:'Categoria', type:'select', options:S.categories.map(c => c.nome), value:f?.cat || 'Casa (conta conjunta)' },
+    { k:'detalhe', label:'Detalhe (opcional)', value:f?.detalhe || '', placeholder:'ex.: crédito habitação, luz, água' }
+  ], out => {
+    if (!out.nome.trim() || out.valor <= 0){ toast('Indica nome e valor'); return false; }
+    const o = { nome:out.nome.trim(), valor:r2(out.valor), dia:Math.max(1, Math.min(31, Math.round(out.dia))), cat:out.cat, detalhe:out.detalhe.trim() };
+    if (f) Object.assign(f, o); else S.fixas.push({ id:uid(), ...o });
+  }, f ? () => { S.fixas = S.fixas.filter(x => x.id !== f.id); } : null);
+}
+
+/* ---------- Ecrã: Metas ---------- */
+function vMetas(){
+  const F = fase(); const sim = simulateDebts();
+  const now = S.goals.filter(g => g.fase === 1); const fut = S.goals.filter(g => g.fase === 2);
+  const avgSpend = (() => { const ks = [...Array(6)].map((_, i) => monthKey(new Date(today().getFullYear(), today().getMonth() - i, 1))).filter(k => movsMonth(k).length); return ks.length ? sum(ks, k => monthSpend(k)) / ks.length : 0; })();
+  const goalCard = g => {
+    const pct = g.alvo ? g.saldo / g.alvo * 100 : 0;
+    const sub = g.tipo === 'emergencia' && avgSpend ? `${String(Math.round(g.saldo / avgSpend * 10) / 10).replace('.', ',')} meses de despesa` : g.tipo === 'reserva' ? 'enche nos meses acima do mês base' : (g.alvo ? `meta ${eur0(g.alvo)}` : 'sem meta definida');
+    const mensal = goalMonthly(g);
+    return `<button class="card" data-goal="${g.id}" style="display:flex;flex-direction:column;gap:8px;text-align:left;cursor:pointer;color:inherit;width:100%">
+      <div class="between" style="width:100%"><p class="t15" style="margin:0">${esc(g.nome)}</p><p class="num" style="margin:0;font-size:15px">${eur0(g.saldo)}</p></div>
+      <div style="width:100%">${bar(pct, g.tipo==='emergencia'?'#7C3AED':'')}</div>
+      <div class="between small muted" style="width:100%"><span>${sub}</span><span>${mensal ? '+' + eur0(mensal) + '/mês' : (g.alvo ? `meta ${eur0(g.alvo)}` : '')}</span></div></button>`;
+  };
+  return `<main class="view">
+  <h1>Metas</h1>
+  ${F === 1 ? `<section class="note blue" style="display:flex;flex-direction:column;gap:6px;padding:16px;border-radius:20px">
+    <b style="font-size:12px;letter-spacing:.4px">FASE 1 · DEVER MENOS</b>
+    <span style="font-size:15px;font-weight:600">${sim.meses == null ? 'Define prestações nas dívidas para veres a data de fim' : `A dívida acaba em ${monthsToLabel(sim.meses)}`}</span>
+    <span>Depois, ${eur0(S.settings.valorFuturo || 0)}/mês passam para as metas do futuro.</span></section>`
+  : `<section class="note green" style="display:flex;flex-direction:column;gap:6px;padding:16px;border-radius:20px"><b style="font-size:12px;letter-spacing:.4px">FASE 2 · CONSTRUIR</b><span style="font-size:15px;font-weight:600">Sem dívidas. ${eur0(S.settings.valorFuturo || 0)}/mês vão para o futuro, antes de gastares.</span></section>`}
+  ${now.map(goalCard).join('')}
+  <section class="card" style="padding:12px 16px 4px">
+    <div class="between"><p class="t15" style="margin:0">Futuro${F===1 ? ` · começa em ${futureStartLabel()}` : ''}</p><button class="btn sm sec" id="editFut">Ajustar</button></div>
+    <div class="list">${fut.map(g => `<div class="item">${F===1 ? `<span class="muted">${ic('lock',18)}</span>` : ''}<p class="grow t15">${esc(g.nome)}</p><p class="small muted">${g.pct}% · ${eur0(goalMonthly(g))}/mês${g.saldo ? ` · tens ${eur0(g.saldo)}` : ''}</p></div>`).join('')}</div>
+  </section>
+  <a href="#registar" id="toTransfer" class="btn sec" style="display:flex;align-items:center;justify-content:center;text-decoration:none">Transferir para uma meta</a>
+  <a href="#patrimonio" class="card between" style="text-decoration:none;color:inherit"><div><p class="t15" style="margin:0">Património líquido</p><p class="small muted" style="margin:2px 0 0">o que tens menos o que deves</p></div><div class="row" style="gap:6px"><span class="num" style="font-size:17px">${eur0(patrimonio().liquido)}</span>${ic('chev',20)}</div></a>
+  <a href="#dividas" class="card between" style="text-decoration:none;color:inherit"><div><p class="t15" style="margin:0">Dívidas</p><p class="small muted" style="margin:2px 0 0">${S.debts.filter(d=>d.saldo>0.005).length} em aberto</p></div><div class="row" style="gap:6px"><span class="num" style="font-size:17px;color:var(--amber)">${eur0(sum(S.debts.filter(d=>d.saldo>0), d => d.saldo))}</span>${ic('chev',20)}</div></a>
+  </main>`;
+}
+AFTER.metas = () => {
+  $('#toTransfer').onclick = e => { e.preventDefault(); go('registar', { tipo:'transferencia' }); };
+  document.querySelectorAll('[data-goal]').forEach(b => b.onclick = () => {
+    const g = S.goals.find(x => x.id === b.dataset.goal);
+    formSheet(g.nome, [
+      { k:'nome', label:'Nome', value:g.nome },
+      { k:'saldo', label:'Quanto tens hoje', type:'num', value:g.saldo },
+      { k:'alvo', label:'Meta (valor a atingir)', type:'num', value:g.alvo, hint: g.tipo==='emergencia' ? 'Sugestão: 3 a 6 meses de despesa' : g.tipo==='reserva' ? 'Sugestão: 1 a 2 vezes o mês base' : '' },
+      { k:'mensal', label:'Pôr por mês (sai antes do Livre para gastar)', type:'num', value:g.mensal }
+    ], out => { Object.assign(g, { nome:out.nome.trim() || g.nome, saldo:r2(out.saldo), alvo:r2(out.alvo), mensal:r2(out.mensal) }); });
+  });
+  $('#editFut').onclick = () => {
+    const fut = S.goals.filter(g => g.fase === 2);
+    formSheet('Metas do futuro', [
+      { k:'valor', label:'Valor por mês para o futuro', type:'num', value:S.settings.valorFuturo, hint:'Começa automaticamente quando a última dívida acabar.' },
+      ...fut.map(g => ({ k:g.id, label:`${g.nome} (%)`, type:'num', value:g.pct })),
+      ...fut.map(g => ({ k:'s_'+g.id, label:`${g.nome} · quanto tens hoje`, type:'num', value:g.saldo }))
+    ], out => {
+      const tot = sum(fut, g => out[g.id]);
+      if (Math.abs(tot - 100) > 0.5){ toast(`As percentagens somam ${Math.round(tot)}%, têm de somar 100%`); return false; }
+      S.settings.valorFuturo = r2(out.valor); fut.forEach(g => { g.pct = r2(out[g.id]); g.saldo = r2(out['s_'+g.id]); });
+    });
+  };
+};
+
+/* ---------- Ecrã: Património ---------- */
+function patrimonio(){
+  const conta = saldoConta();
+  const fundos = sum(S.goals, g => g.saldo || 0);
+  const acoes = S.settings.investimentosValor || 0;
+  const aReceber = sum(S.debts.filter(d => d.saldo < 0), d => -d.saldo);
+  const deve = sum(S.debts.filter(d => d.saldo > 0), d => d.saldo);
+  const tem = conta + fundos + acoes + aReceber;
+  return { conta, fundos, acoes, aReceber, tem, deve, liquido: r2(tem - deve) };
+}
+function vPatrimonio(){
+  const P = patrimonio();
+  const byType = t => sum(S.debts.filter(d => d.saldo > 0 && t.includes(d.tipo)), d => d.saldo);
+  const row = (a, b) => `<div class="between" style="font-size:14px;padding:4px 0"><span class="muted">${a}</span><b>${b}</b></div>`;
+  return `<main class="view">${backHeader('Património','metas')}
+  <section class="card"><p class="lbl">Património líquido</p><p class="num" style="font-size:40px;margin:2px 0 0">${eur0(P.liquido)}</p></section>
+  <div class="grid2">
+    <section class="card" style="padding:14px"><p class="lbl">Tens</p><p class="num" style="font-size:22px;margin:2px 0 8px">${eur0(P.tem)}</p>${row('Conta', eur0(P.conta))}${row('Metas e fundos', eur0(P.fundos))}${row('Ações', eur0(P.acoes))}${P.aReceber ? row('A receber', eur0(P.aReceber)) : ''}</section>
+    <section class="card" style="padding:14px"><p class="lbl">Deves</p><p class="num" style="font-size:22px;margin:2px 0 8px;color:var(--amber)">${eur0(P.deve)}</p>${row('Estado', eur0(byType(['estado'])))}${row('Cartão', eur0(byType(['cartao'])))}${row('Créditos', eur0(byType(['credito','habitacao','automovel'])))}${row('Pessoas', eur0(byType(['splitwise','pessoal'])))}</section>
+  </div>
+  <button class="btn sec" id="editAcoes">Atualizar valor das ações</button>
+  <a href="#dividas" class="btn sec" style="display:flex;align-items:center;justify-content:center;text-decoration:none">Ver dívidas</a>
+  <p class="small muted" style="margin:0">O valor das ações é atualizado por ti (o que a corretora mostra). O registo de compras e vendas para o Anexo J chega na próxima versão.</p>
+  </main>`;
+}
+AFTER.patrimonio = () => {
+  $('#editAcoes').onclick = () => formSheet('Valor atual das ações', [{ k:'v', label:'Valor total na corretora', type:'num', value:S.settings.investimentosValor }], out => { S.settings.investimentosValor = r2(out.v); });
+};
+
+/* ---------- Ecrã: Dívidas ---------- */
+const DEBT_TYPES = [['estado','Estado (Finanças / Segurança Social)'],['cartao','Cartão de crédito'],['credito','Crédito pessoal'],['automovel','Crédito automóvel'],['habitacao','Crédito habitação'],['splitwise','Splitwise (saldo a acertar)'],['pessoal','Pessoal (sem juros)']];
+function vDividas(){
+  const open = sortedDebts(S.debts.filter(d => d.saldo > 0.005));
+  const closed = S.debts.filter(d => d.saldo <= 0.005);
+  const sim = simulateDebts(); const sim50 = simulateDebts(50);
+  const total = sum(open, d => d.saldo);
+  const rowD = (d, i) => {
+    const endM = sim.end[d.id];
+    const info = d.tipo === 'splitwise' ? 'atualizas quando acertas contas' : `${d.prestacao ? eur0(d.prestacao) + '/mês' : 'sem prestação'}${endM ? ' · acaba ' + monthsToLabel(endM) : ''}`;
+    return `<button class="item" data-debt="${d.id}" style="width:100%;background:none;border-left:none;border-right:none;border-bottom:none;text-align:left;cursor:pointer;color:inherit;align-items:flex-start">
+      <span class="rank ${i<3?'on':''}">${i+1}</span>
+      <div class="grow" style="display:flex;flex-direction:column;gap:4px"><div class="between"><p class="t15">${esc(d.nome)}${d.tipo==='estado'?'<span class="badge">ESTADO</span>':''}</p><p class="num" style="font-size:15px;color:var(--amber)">${eur0(d.saldo)}</p></div>
+      <p class="small muted">${(() => { const lab = DEBT_TYPES.find(t => t[0]===d.tipo)?.[1] || ''; const parts = []; if (d.tipo !== 'estado' && !norm(lab).startsWith(norm(d.nome))) parts.push(esc(lab)); if (d.taeg) parts.push(`TAEG ${String(d.taeg).replace('.',',')}%`); if (d.nota) parts.push(esc(d.nota)); return parts.join(' · '); })()}</p><p class="small">${info}</p></div></button>`;
+  };
+  return `<main class="view">${backHeader('Dívidas','metas')}
+  <div class="between" style="align-items:flex-end"><div><p class="lbl">Total em dívida</p><p class="num big" style="margin:2px 0 0;color:var(--amber)">${eur0(total)}</p></div>
+    <p class="small muted" style="margin:0 0 6px;text-align:right">${open.length} em aberto<br>${sim.meses ? 'livre em ' + monthsToLabel(sim.meses) : ''}</p></div>
+  <div class="seg" role="group" aria-label="Ordem de pagamento">
+    <button type="button" data-strat="estado_juro" class="${S.settings.estrategia!=='menor'?'on':''}">Estado, depois maior juro</button>
+    <button type="button" data-strat="menor" class="${S.settings.estrategia==='menor'?'on':''}">Menor valor primeiro</button></div>
+  <section class="card tight">${open.length ? `<div class="list">${open.map(rowD).join('')}</div>` : '<p class="empty">Sem dívidas em aberto.</p>'}</section>
+  <div class="grid2"><button class="btn sec" id="payD">Registar pagamento</button><button class="btn ghost" id="addD">+ Adicionar dívida</button></div>
+  <section class="card"><div class="between"><p class="t15" style="margin:0">Reforço mensal</p><button class="btn sm sec" id="editRef">${eur0(S.settings.reforcoDivida)}/mês</button></div>
+    <p class="small muted" style="margin:6px 0 0">Vai todo para a dívida n.º 1 da lista, além das prestações. Sai antes do Livre para gastar.</p></section>
+  ${sim.meses && sim50.meses ? `<section class="note green" style="display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:20px"><b>E se pagar mais 50 €/mês?</b><span>Acabas em <b>${monthsToLabel(sim50.meses)}</b> em vez de ${monthsToLabel(sim.meses)}${sim.juros - sim50.juros > 1 ? ` e poupas cerca de ${eur0(sim.juros - sim50.juros)} em juros` : ''}.</span></section>` : ''}
+  ${closed.length ? `<section class="card tight"><p class="lbl" style="padding-top:10px">Pagas</p><div class="list">${closed.map(d => `<button class="item" data-debt="${d.id}" style="width:100%;background:none;border-left:none;border-right:none;border-bottom:none;text-align:left;color:inherit"><p class="grow t15">${esc(d.nome)}</p><span style="color:var(--teal)">${ic('check',18,2.2)}</span></button>`).join('')}</div></section>` : ''}
+  <p class="small muted" style="margin:0">As dívidas ao Estado ficam sempre primeiro: juros de mora e risco de penhora. Datas estimadas com os juros indicados.</p>
+  </main>`;
+}
+AFTER.dividas = () => {
+  document.querySelectorAll('[data-strat]').forEach(b => b.onclick = () => { S.settings.estrategia = b.dataset.strat; save(); render(); });
+  $('#addD').onclick = () => debtForm();
+  $('#payD').onclick = () => go('registar', { tipo:'divida' });
+  $('#editRef').onclick = () => formSheet('Reforço mensal das dívidas', [{ k:'v', label:'Valor extra por mês', type:'num', value:S.settings.reforcoDivida }], out => { S.settings.reforcoDivida = r2(out.v); });
+  document.querySelectorAll('[data-debt]').forEach(b => b.onclick = () => debtForm(S.debts.find(d => d.id === b.dataset.debt)));
+};
+function debtForm(d){
+  formSheet(d ? 'Editar dívida' : 'Nova dívida', [
+    { k:'nome', label:'A quem deves', value:d?.nome || '', placeholder:'ex.: Cartão de crédito' },
+    { k:'tipo', label:'Tipo', type:'select', options:DEBT_TYPES, value:d?.tipo || 'cartao' },
+    { k:'saldo', label:'Quanto falta pagar', type:'num', value:d?.saldo ?? '', hint:'Splitwise: valor negativo = devem-te a ti' },
+    { k:'prestacao', label:'Prestação mensal', type:'num', value:d?.prestacao ?? 0 },
+    { k:'taeg', label:'Taxa de juro anual (TAEG %)', type:'num', value:d?.taeg ?? 0 },
+    { k:'dia', label:'Dia do pagamento', type:'num', value:d?.dia ?? 0 },
+    { k:'nota', label:'Nota (opcional)', value:d?.nota || '', placeholder:'ex.: plano prestacional 24 meses' }
+  ], out => {
+    if (!out.nome.trim()){ toast('Indica a quem deves'); return false; }
+    const o = { nome:out.nome.trim(), tipo:out.tipo, saldo:r2(out.saldo), prestacao:r2(out.prestacao), taeg:r2(out.taeg), dia:Math.max(0, Math.min(31, Math.round(out.dia))), nota:out.nota.trim() };
+    if (d) Object.assign(d, o); else S.debts.push({ id:uid(), ...o });
+  }, d ? () => { S.debts = S.debts.filter(x => x.id !== d.id); } : null);
+}
+
+/* ---------- Ecrã: Impostos ---------- */
+function vImpostos(){
+  const t = today(); const y = t.getFullYear(); const q = quarterOf(t);
+  const [qa, qb] = quarterRange(y, q);
+  const recQ = S.movs.filter(m => m.tipo === 'receita' && new Date(m.data) >= qa && new Date(m.data) <= qb);
+  const ivaQ = sum(recQ, m => m.iva || 0); const baseQ = sum(recQ, m => m.base || 0);
+  const ssMensalProx = r2(baseQ * S.rules.ssCoeficiente * S.rules.ssTaxa / 3);
+  const TB = taxBreakdown();
+  const dls = deadlines(t, 6);
+  const prevQ = q === 1 ? [y-1, 4] : [y, q-1];
+  const ivaPrev = ivaAPagarTrimestre(...prevQ);
+  const recY = S.movs.filter(m => m.tipo === 'receita' && m.data.startsWith(String(y)));
+  const outdated = S.rules.ano < y;
+  return `<main class="view">
+  <div class="between"><h1>Impostos</h1><span class="pill ${outdated?'amber':'teal'}">Regras ${esc(S.rules.ano)}${outdated?' · rever':' ✓'}</span></div>
+  ${outdated ? `<p class="note amber">As regras fiscais são de ${S.rules.ano}. Confirma as taxas e datas deste ano em Definições → Regras fiscais.</p>` : ''}
+  <section class="card" style="display:flex;flex-direction:column;gap:10px">
+    <p class="t15" style="margin:0">${q}.º trimestre · ${MES3[(q-1)*3]}–${MES3[q*3-1]}</p>
+    <div class="grid2">
+      <div><p class="lbl">IVA acumulado</p><p class="num" style="font-size:22px;margin:2px 0 0">${eur0(ivaQ)}</p><p class="small muted" style="margin:2px 0 0">a pagar no trimestre seguinte</p></div>
+      <div><p class="lbl">SS por mês a seguir</p><p class="num" style="font-size:22px;margin:2px 0 0">${eur0(ssMensalProx)}</p><p class="small muted" style="margin:2px 0 0">estimativa pelos recibos</p></div>
+    </div>
+  </section>
+  <section class="card" aria-label="Reservado"><p class="t15" style="margin:0 0 8px">Reservado na conta</p>
+    <div class="list">
+      <div class="item"><p class="grow">IVA</p><p class="t15">${eur(TB.iva)}</p></div>
+      <div class="item"><p class="grow">Segurança Social</p><p class="t15">${eur(TB.ss)}</p></div>
+      <div class="item"><p class="grow">IRS</p><p class="t15">${eur(TB.irs)}</p></div>
+    </div>
+    ${ivaPrev ? `<p class="small" style="margin:8px 0 0;color:var(--teal);font-weight:600">IVA do ${prevQ[1]}.º trimestre (${prevQ[0]}) pelos teus registos: ${eur(ivaPrev)}</p>` : ''}
+    <p class="small muted" style="margin:8px 0 0">Quando pagares, regista uma despesa na categoria Impostos e escolhe qual. A reserva desce sozinha.</p>
+  </section>
+  <section class="card tight" aria-label="Próximos prazos"><p class="lbl" style="padding-top:10px">Próximos prazos</p><div class="list">
+    ${dls.map((p, i) => `<div class="item"><div style="width:44px;text-align:center;flex-shrink:0"><p class="num" style="font-size:18px;line-height:1;${i<2?'color:var(--amber)':''}">${p.date.getDate()}</p><p class="small muted" style="margin-top:2px">${MES3[p.date.getMonth()]}</p></div><div class="grow"><p class="t15">${esc(p.nome)}</p><p class="small muted">${esc(p.ref)}</p></div></div>`).join('')}
+  </div></section>
+  <button class="btn sec" id="ics">${ic('cal',18)} Enviar prazos para o Calendário</button>
+  <section class="card" aria-label="IRS">
+    <div class="between" style="margin-bottom:6px"><p class="t15" style="margin:0">IRS de ${y}</p><p class="small muted" style="margin:0">entrega abr–jun ${y+1}</p></div>
+    <div class="list">
+      <div class="item"><p class="grow small"><b>Recibos verdes</b><br><span class="muted">${recY.length} recibos · valor sem IVA</span></p><p class="t15">${eur(sum(recY, m => m.base || 0))}</p></div>
+      <div class="item"><p class="grow small"><b>IVA liquidado</b><br><span class="muted">no ano</span></p><p class="t15">${eur(sum(recY, m => m.iva || 0))}</p></div>
+      <div class="item"><p class="grow small"><b>Anexo J · ações</b><br><span class="muted">DEGIRO, Trade Republic: registo de compras/vendas na próxima versão</span></p></div>
+    </div>
+  </section>
+  </main>`;
+}
+AFTER.impostos = () => {
+  $('#ics').onclick = () => download('prazos-fiscais.ics', makeICS(), 'text/calendar');
+};
+
+/* ---------- Ecrã: Definições ---------- */
+function vDefinicoes(){
+  const st = S.settings; const r = S.rules;
+  return `<main class="view">${backHeader('Definições','hoje')}
+  <section class="card tight"><div class="list">
+    ${setRow('saldoInicial','Saldo inicial da conta', eur(st.saldoInicial), 'O saldo no dia em que começaste a usar a app')}
+    ${setRow('mesBase','Mês base', st.mesBase ? eur0(st.mesBase) : 'por definir', 'Quanto contas receber num mês fraco')}
+    ${setRow('irsPct','Reserva para IRS', st.irsPct + '% de cada recibo', 'Para não teres surpresas no acerto anual')}
+  </div></section>
+  <section class="card tight"><p class="lbl" style="padding-top:10px">Regras fiscais · ${esc(r.versao)}</p><div class="list">
+    <div class="item"><p class="grow">IVA</p><p class="t15">${String(r2(r.ivaTaxa*100)).replace('.',',')}%</p></div>
+    <div class="item"><p class="grow">Segurança Social</p><p class="t15">${String(r2(r.ssTaxa*100)).replace('.',',')}% × ${Math.round(r.ssCoeficiente*100)}%</p></div>
+    <div class="item"><p class="grow small muted">${esc(r.nota)} <a href="${esc(r.fontes.iva)}" target="_blank" rel="noopener">Finanças</a> · <a href="${esc(r.fontes.ss)}" target="_blank" rel="noopener">Seg. Social</a></p></div>
+  </div>
+  <div class="grid2" style="padding:6px 0 12px"><button class="btn sm sec" id="editRules" style="width:100%">Editar taxas</button><button class="btn sm sec" id="updRules" style="width:100%">Atualizar regras</button></div></section>
+  <section class="card" style="display:flex;flex-direction:column;gap:10px"><p class="t15" style="margin:0">Cópia de segurança</p>
+    <p class="small muted" style="margin:0">Ficheiro encriptado (abre com a palavra-passe ou o código de recuperação). No iPhone escolhe “Guardar em Ficheiros” → iCloud Drive. Para restaurar noutro telemóvel, abre-o aqui.</p>
+    <p class="small" style="margin:0;font-weight:600;${backupDue() ? 'color:var(--amber)' : 'color:var(--teal)'}">${S.settings.ultimaCopia ? `Última cópia: ${shortDate(S.settings.ultimaCopia)}` : 'Ainda sem cópia'}</p>
+    <button class="btn sec" id="bkExp">Exportar cópia (.json)</button>
+    <label class="btn sec" style="display:flex;align-items:center;justify-content:center;cursor:pointer">Restaurar cópia<input type="file" id="bkImp" accept=".json,application/json" class="sr"></label>
+    <button class="btn sec" id="csvExp">Exportar movimentos para Excel (.csv)</button></section>
+  <section class="card" style="display:flex;flex-direction:column;gap:10px"><p class="t15" style="margin:0">Segurança</p>
+    <button class="btn sec" id="lockNow">Bloquear agora</button>
+    <button class="btn sec" id="chPass">Alterar palavra-passe</button>
+    <button class="btn sec" id="newCode">Gerar novo código de recuperação</button>
+    <button class="btn danger" id="wipe">Apagar todos os dados deste telemóvel</button></section>
+  <p class="small muted" style="margin:0;text-align:center">Vida Tranquila ${APP_VERSION} · os dados ficam só neste telemóvel</p>
+  </main>`;
+}
+function setRow(k, label, val, hint){ return `<button class="item" data-set="${k}" style="width:100%;background:none;border-left:none;border-right:none;border-bottom:none;text-align:left;cursor:pointer;color:inherit"><div class="grow"><p class="t15">${label}</p><p class="small muted">${hint}</p></div><p class="small" style="font-weight:600">${val}</p>${ic('chev',18)}</button>`; }
+AFTER.definicoes = () => {
+  const labels = { saldoInicial:'Saldo inicial da conta', mesBase:'Mês base (por mês)', irsPct:'Reserva para IRS (%)' };
+  document.querySelectorAll('[data-set]').forEach(b => b.onclick = () => { const k = b.dataset.set; formSheet(labels[k], [{ k:'v', label:labels[k], type:'num', value:S.settings[k] }], out => { S.settings[k] = r2(out.v); if (k === 'mesBase'){ const g = S.goals.find(x => x.id === 'reserva'); if (g && !g.alvo) g.alvo = r2(out.v); } }); });
+  $('#editRules').onclick = () => formSheet('Taxas', [
+    { k:'ano', label:'Ano das regras', type:'num', value:S.rules.ano },
+    { k:'iva', label:'IVA (%)', type:'num', value:r2(S.rules.ivaTaxa*100) },
+    { k:'ss', label:'Taxa Segurança Social (%)', type:'num', value:r2(S.rules.ssTaxa*100) },
+    { k:'coef', label:'Coeficiente SS sobre serviços (%)', type:'num', value:r2(S.rules.ssCoeficiente*100) }
+  ], out => { S.rules.ano = Math.round(out.ano); S.rules.ivaTaxa = out.iva/100; S.rules.ssTaxa = out.ss/100; S.rules.ssCoeficiente = out.coef/100; S.rules.versao = `${S.rules.ano}.manual`; });
+  $('#updRules').onclick = updateRulesFlow;
+  $('#bkExp').onclick = exportBackup;
+  $('#bkImp').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    try {
+      const v = JSON.parse(await f.text());
+      if (!v.ct || !(v.v === 2 ? v.wrapP : v.salt)) throw new Error('formato');
+      const secret = await ask('Palavra-passe dessa cópia (ou o código de recuperação):', { input:'password', ok:'Abrir' }); if (!secret) return;
+      let r;
+      try { r = await openWithPass(v, secret); } catch(e1){ if (v.v === 2) r = await openWithCode(v, secret); else throw e1; }
+      if (!await ask(`Substituir os dados atuais pela cópia (${r.data.movs?.length || 0} movimentos)?`, { ok:'Substituir', danger:true })) return;
+      S = r.data; KEY = r.key; DEK_RAW = r.raw;
+      const { app:_a, ...vault } = v;
+      if (r.legacy){ const { fields, code } = await newVaultKeys(secret); VAULT = fields; await saveNow(); showRecoveryCode(code, () => { location.hash = 'hoje'; render(); }); return; }
+      VAULT = vault; writeVault(VAULT); toast('Cópia restaurada'); render();
+    } catch(err){ toast('Não foi possível abrir: palavra-passe/código errado ou ficheiro inválido'); }
+  };
+  $('#csvExp').onclick = () => {
+    const rows = [['Data','Tipo','Descrição','Categoria','Valor','Valor sem IVA','IVA','Reserva SS','Reserva IRS']];
+    for (const m of [...S.movs].sort((a,b) => a.data.localeCompare(b.data))) rows.push([m.data, m.tipo, m.desc||'', m.cat||'', m.valor, m.base??'', m.iva??'', m.reservas?.ss??'', m.reservas?.irs??''].map(x => typeof x === 'number' ? String(x).replace('.', ',') : x));
+    download(`movimentos-${iso(today())}.csv`, '﻿' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\r\n'), 'text/csv');
+  };
+  $('#lockNow').onclick = lock;
+  $('#chPass').onclick = () => {
+    openSheet(`<div class="between"><h2>Alterar palavra-passe</h2><button class="iconbtn" data-close aria-label="Fechar">${ic('x')}</button></div>
+      <label class="field"><span>Palavra-passe atual</span><input class="input" type="password" id="p0" autocomplete="current-password"></label>
+      <label class="field"><span>Nova palavra-passe (mín. 8)</span><input class="input" type="password" id="p1" autocomplete="new-password"></label>
+      <label class="field"><span>Repetir</span><input class="input" type="password" id="p2" autocomplete="new-password"></label>
+      <button class="btn" id="pSave">Alterar</button>`, sh => {
+        $('#pSave', sh).onclick = async () => {
+          const p0 = $('#p0', sh).value, p1 = $('#p1', sh).value, p2 = $('#p2', sh).value;
+          try { await openWithPass(VAULT, p0); } catch(e){ toast('Palavra-passe atual errada'); return; }
+          if (p1.length < 8){ toast('A nova palavra-passe precisa de 8 caracteres'); return; }
+          if (p1 !== p2){ toast('As palavras-passe não coincidem'); return; }
+          await rewrapPass(p1); writeVault(VAULT);
+          closeSheet(true); toast('Palavra-passe alterada. O código de recuperação continua válido.');
+        };
+      });
+  };
+  $('#newCode').onclick = async () => {
+    const p = await ask('Gerar um código novo? O código antigo deixa de funcionar.\n\nConfirma com a tua palavra-passe:', { input:'password', ok:'Gerar código' });
+    if (!p) return;
+    try { await openWithPass(VAULT, p); } catch(e){ toast('Palavra-passe errada'); return; }
+    const code = await newCodeForVault(); writeVault(VAULT);
+    showRecoveryCode(code, () => render());
+  };
+  $('#wipe').onclick = async () => {
+    const w = await ask('Apagar TODOS os dados deste telemóvel? Só os recuperas com uma cópia de segurança.\n\nEscreve APAGAR para confirmar.', { input:'text', ok:'Apagar tudo', danger:true, placeholder:'APAGAR' });
+    if (w !== 'APAGAR') return;
+    await wipeVault(); S = null; KEY = null; DEK_RAW = null; VAULT = null; location.hash = ''; render();
+  };
+};
+/* Cópia de segurança: no iPhone abre a folha de partilha → "Guardar em Ficheiros" → iCloud Drive */
+async function exportBackup(){
+  if (!VAULT) return;
+  await saveNow();
+  const name = `vida-tranquila-copia-${iso(today())}.json`;
+  const content = JSON.stringify({ app:'vida-tranquila', ...VAULT });
+  let ok = false;
+  try {
+    const file = new File([content], name, { type:'application/json' });
+    if (navigator.canShare && navigator.canShare({ files:[file] })){
+      await navigator.share({ files:[file], title:'Cópia Vida Tranquila' }); ok = true;
+    }
+  } catch(e){ if (e && e.name === 'AbortError') return; }
+  if (!ok){ download(name, content, 'application/json'); ok = true; }
+  S.settings.ultimaCopia = iso(today()); save();
+  toast('Cópia feita. Guarda-a no iCloud Drive (Ficheiros).');
+  render();
+}
+function backupDue(){
+  if (!S || !S.movs.length) return false;
+  const last = S.settings.ultimaCopia; if (!last) return true;
+  return (today() - new Date(last + 'T00:00:00')) / 86400000 >= 7;
+}
+async function updateRulesFlow(){
+  const url = await ask('Endereço do ficheiro de regras (JSON). Fica guardado para os próximos anos.', { input:'url', ok:'Atualizar', value:S.settings.regrasUrl || '', placeholder:'https://…/regras.json' });
+  if (!url) return;
+  try {
+    const res = await fetch(url, { cache:'no-store' }); if (!res.ok) throw new Error(res.status);
+    const nr = await res.json();
+    const ok = nr && typeof nr.ano === 'number' && nr.ivaTaxa > 0 && nr.ivaTaxa < 1 && nr.ssTaxa > 0 && nr.ssTaxa < 1 && nr.ssCoeficiente > 0 && nr.ssCoeficiente <= 1 && Array.isArray(nr.prazos) && nr.prazos.every(p => p.nome && p.mes >= 1 && p.mes <= 12);
+    if (!ok) throw new Error('formato');
+    const ch = [];
+    if (nr.ano !== S.rules.ano) ch.push(`Ano: ${S.rules.ano} → ${nr.ano}`);
+    if (nr.ivaTaxa !== S.rules.ivaTaxa) ch.push(`IVA: ${S.rules.ivaTaxa*100}% → ${nr.ivaTaxa*100}%`);
+    if (nr.ssTaxa !== S.rules.ssTaxa) ch.push(`SS: ${S.rules.ssTaxa*100}% → ${nr.ssTaxa*100}%`);
+    if (nr.ssCoeficiente !== S.rules.ssCoeficiente) ch.push(`Coeficiente SS: ${S.rules.ssCoeficiente*100}% → ${nr.ssCoeficiente*100}%`);
+    if (JSON.stringify(nr.prazos) !== JSON.stringify(S.rules.prazos)) ch.push(`Prazos: ${nr.prazos.length} datas atualizadas`);
+    if (!ch.length){ toast('As regras já estão atualizadas'); S.settings.regrasUrl = url; save(); return; }
+    if (!await ask('Mudanças nas regras:\n\n' + ch.join('\n'), { ok:'Aceitar mudanças' })) return;
+    S.rules = { ...DEFAULT_RULES, ...nr }; S.settings.regrasUrl = url; save(); toast('Regras atualizadas'); render();
+  } catch(e){ toast('Não consegui atualizar. A app continua com as regras atuais.'); }
+}
+function download(name, content, type){
+  const blob = new Blob([content], { type }); const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+/* ---------- Login / primeira vez ---------- */
+async function renderLogin(){
+  VAULT = await readVault();
+  const first = !VAULT;
+  const logo = `<div class="logo"><svg width="64" height="64" viewBox="0 0 120 120" aria-hidden="true"><rect width="120" height="120" rx="28" fill="#FDF6EC"/><path d="M32 74 A28 28 0 0 1 88 74 Z" fill="#F59E0B"/><line x1="22" y1="74" x2="98" y2="74" stroke="#0E1B2C" stroke-width="6" stroke-linecap="round"/><line x1="36" y1="90" x2="84" y2="90" stroke="#0F766E" stroke-width="6" stroke-linecap="round"/></svg></div>`;
+  app.innerHTML = `<main class="login">
+    ${logo}
+    <div><h1 style="font-size:28px">Vida Tranquila</h1><p class="muted" style="margin:6px 0 0">${first ? 'Cria uma palavra-passe. Os teus dados ficam encriptados só neste telemóvel.' : 'Introduz a palavra-passe para entrar.'}</p></div>
+    <form id="lf" style="display:flex;flex-direction:column;gap:12px">
+      <input type="text" name="username" autocomplete="username" value="Vida Tranquila" class="sr" tabindex="-1" aria-hidden="true">
+      <label class="field"><span>Palavra-passe</span><input class="input" type="password" id="lp" autocomplete="${first?'new-password':'current-password'}" required></label>
+      ${first ? `<label class="field"><span>Repetir palavra-passe</span><input class="input" type="password" id="lp2" autocomplete="new-password" required></label>
+      <p class="note blue">A seguir recebes um código de recuperação, para entrares se te esqueceres da palavra-passe.</p>` : ''}
+      <button class="btn" type="submit" id="lb">${first ? 'Criar e entrar' : 'Entrar'}</button>
+      ${first ? '' : `<button class="btn sec" type="button" id="forgot" style="border:none;background:transparent;color:var(--teal);height:44px">Esqueci-me da palavra-passe</button>`}
+    </form>
+  </main>`;
+  $('#lf').onsubmit = async e => {
+    e.preventDefault();
+    const p = $('#lp').value; const btn = $('#lb'); btn.disabled = true; btn.textContent = 'A abrir…';
+    try {
+      if (first){
+        if (p.length < 8) throw new Error('A palavra-passe precisa de pelo menos 8 caracteres');
+        if (p !== $('#lp2').value) throw new Error('As palavras-passe não coincidem');
+        const { fields, code } = await newVaultKeys(p);
+        VAULT = fields;
+        showRecoveryCode(code, onboarding);
+        return;
+      }
+      const r = await openWithPass(VAULT, p);
+      S = r.data; KEY = r.key; DEK_RAW = r.raw; migrate();
+      if (r.legacy){
+        // cofre antigo (v1.0): passa a ter código de recuperação
+        const { fields, code } = await newVaultKeys(p); VAULT = fields; await saveNow();
+        showRecoveryCode(code, () => { location.hash = location.hash || 'hoje'; render(); });
+        return;
+      }
+      location.hash = location.hash || 'hoje'; render();
+    } catch(err){
+      KEY = null; DEK_RAW = null; S = null; btn.disabled = false; btn.textContent = first ? 'Criar e entrar' : 'Entrar';
+      toast(err && err.message && first ? err.message : 'Palavra-passe errada');
+    }
+  };
+  const fg = $('#forgot'); if (fg) fg.onclick = recoveryFlow;
+}
+function showRecoveryCode(code, next){
+  closeSheet(true);
+  app.innerHTML = `<main class="login">
+    <div><h1 style="font-size:24px">O teu código de recuperação</h1><p class="muted" style="margin:6px 0 0">Se te esqueceres da palavra-passe, entras com este código e crias uma nova. É a única forma de recuperar os dados.</p></div>
+    <p id="rcCode" style="margin:0;padding:18px;border-radius:16px;background:var(--card);border:2px dashed var(--teal);font-family:ui-monospace,Menlo,monospace;font-size:20px;font-weight:700;letter-spacing:1px;text-align:center;line-height:1.6;user-select:all;-webkit-user-select:all">${esc(code)}</p>
+    <button class="btn sec" type="button" id="rcCopy">Copiar código</button>
+    <div class="note amber" style="display:flex;flex-direction:column;gap:4px"><b>Guarda-o em pelo menos um destes sítios:</b>
+      <span>· Palavras-passe do iPhone (nova entrada “Vida Tranquila — recuperação”)</span>
+      <span>· Uma nota bloqueada nas Notas</span>
+      <span>· Em papel, num sítio seguro em casa</span>
+      <span>Quem tiver o código consegue abrir os teus dados: não o partilhes por mensagem.</span></div>
+    <label class="row" style="gap:10px;font-size:15px;cursor:pointer"><input type="checkbox" id="rcOk" style="width:22px;height:22px;accent-color:var(--teal)"> Já guardei o código num sítio seguro</label>
+    <button class="btn" type="button" id="rcNext" disabled style="opacity:.5">Continuar</button>
+  </main>`;
+  $('#rcCopy').onclick = async () => { try { await navigator.clipboard.writeText(code); toast('Código copiado'); } catch(e){ toast('Não deu para copiar: seleciona o código e copia à mão'); } };
+  $('#rcOk').onchange = e => { const b = $('#rcNext'); b.disabled = !e.target.checked; b.style.opacity = e.target.checked ? 1 : .5; };
+  $('#rcNext').onclick = () => next();
+}
+async function recoveryFlow(){
+  VAULT = await readVault();
+  if (!VAULT || VAULT.v !== 2){ toast('Esta versão dos dados ainda não tem código de recuperação'); return; }
+  app.innerHTML = `<main class="login">
+    <div><h1 style="font-size:24px">Recuperar acesso</h1><p class="muted" style="margin:6px 0 0">Escreve o código de recuperação (com ou sem traços) e escolhe uma palavra-passe nova.</p></div>
+    <form id="rf" style="display:flex;flex-direction:column;gap:12px" autocomplete="off">
+      <label class="field"><span>Código de recuperação</span><input class="input" id="rcIn" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" style="font-family:ui-monospace,Menlo,monospace"></label>
+      <input type="text" name="username" autocomplete="username" value="Vida Tranquila" class="sr" tabindex="-1" aria-hidden="true">
+      <label class="field"><span>Nova palavra-passe (mín. 8)</span><input class="input" type="password" id="rp1" autocomplete="new-password"></label>
+      <label class="field"><span>Repetir</span><input class="input" type="password" id="rp2" autocomplete="new-password"></label>
+      <button class="btn" type="submit" id="rb">Recuperar e entrar</button>
+      <button class="btn sec" type="button" id="rBack" style="border:none;background:transparent">Voltar</button>
+    </form></main>`;
+  $('#rBack').onclick = renderLogin;
+  $('#rf').onsubmit = async e => {
+    e.preventDefault();
+    const p1 = $('#rp1').value, p2 = $('#rp2').value, btn = $('#rb');
+    if (normCode($('#rcIn').value).length !== 24){ toast('O código tem 24 letras e números'); return; }
+    if (p1.length < 8){ toast('A palavra-passe precisa de pelo menos 8 caracteres'); return; }
+    if (p1 !== p2){ toast('As palavras-passe não coincidem'); return; }
+    btn.disabled = true; btn.textContent = 'A verificar…';
+    try {
+      const r = await openWithCode(VAULT, $('#rcIn').value);
+      KEY = r.key; DEK_RAW = r.raw; S = r.data;
+      await rewrapPass(p1); writeVault(VAULT); migrate();
+      location.hash = 'hoje'; render(); toast('Palavra-passe nova criada. O teu código continua válido.');
+    } catch(err){ btn.disabled = false; btn.textContent = 'Recuperar e entrar'; toast('Código errado'); }
+  };
+}
+function onboarding(){
+  app.innerHTML = `<main class="login">
+    <div><h1 style="font-size:26px">Como queres começar?</h1><p class="muted" style="margin:6px 0 0">Podes experimentar com dados de exemplo e apagar tudo depois em Definições.</p></div>
+    <button class="btn" id="obEmpty">Começar com os meus dados</button>
+    <button class="btn sec" id="obDemo">Experimentar com dados de exemplo</button>
+  </main>`;
+  $('#obDemo').onclick = () => { S = demoState(); save(); location.hash = 'hoje'; render(); toast('Dados de exemplo carregados'); };
+  $('#obEmpty').onclick = () => {
+    S = freshState();
+    app.innerHTML = `<main class="login">
+      <div><h1 style="font-size:24px">Três números para começar</h1><p class="muted" style="margin:6px 0 0">Podes mudar tudo depois em Definições.</p></div>
+      <label class="field"><span>Quanto tens hoje na conta à ordem</span><input class="input" id="o1" inputmode="decimal" placeholder="0,00"></label>
+      <label class="field"><span>Mês base: quanto recebes num mês fraco (sem IVA)</span><input class="input" id="o2" inputmode="decimal" placeholder="ex.: 1800"></label>
+      <label class="field"><span>Reserva para IRS (% de cada recibo)</span><input class="input" id="o3" inputmode="decimal" value="15"></label>
+      <button class="btn" id="oGo">Entrar na app</button></main>`;
+    $('#oGo').onclick = () => {
+      const a = parseNum($('#o1').value), b = parseNum($('#o2').value), c = parseNum($('#o3').value);
+      S.settings.saldoInicial = isNaN(a) ? 0 : r2(a); S.settings.mesBase = isNaN(b) ? 0 : r2(b); S.settings.irsPct = isNaN(c) ? 15 : r2(c);
+      const g = S.goals.find(x => x.id === 'reserva'); if (g) g.alvo = S.settings.mesBase;
+      save(); location.hash = 'hoje'; render();
+      setTimeout(() => toast('Começa por adicionar as despesas fixas e as dívidas'), 400);
+    };
+  };
+}
+function migrate(){ if (!S.v) S.v = 1; S.settings = { ...freshState().settings, ...S.settings }; }
+function lock(){ S = null; KEY = null; DEK_RAW = null; closeSheet(true); renderLogin(); }
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) hiddenAt = Date.now();
+  else if (S && hiddenAt && Date.now() - hiddenAt > LOCK_AFTER_MS) lock();
+});
+
+/* ---------- Arranque ---------- */
+if (!window.crypto || !crypto.subtle){
+  app.innerHTML = '<main class="login"><h1>Vida Tranquila</h1><p>Este browser não suporta encriptação. Abre a app em https (por exemplo no Safari).</p></main>';
+} else {
+  renderLogin();
+}
+if ('serviceWorker' in navigator && location.protocol === 'https:'){
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+// Exposto só para testes automáticos
+window.__vt = { rawVault: async () => JSON.stringify(await readVault()), parseQuick, livre: () => livre(), simulateDebts: x => simulateDebts(x), get S(){ return S; }, deadlines: () => deadlines(), taxBreakdown: () => taxBreakdown() };
+</script>
+</body>
+</html>
