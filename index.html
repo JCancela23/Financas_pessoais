@@ -112,7 +112,7 @@ nav.tabs a.plus{width:58px;height:58px;margin-top:-24px;border-radius:29px;backg
    Tudo corre no telemóvel. Dados encriptados (AES-GCM) com
    chave derivada da palavra-passe (PBKDF2). Sem servidores.
    ========================================================= */
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.3.1';
 const STORE_KEY = 'vt_vault_v1';
 const LOCK_AFTER_MS = 2 * 60 * 1000;
 
@@ -400,10 +400,8 @@ function saldoConta(){
   return r2(s);
 }
 function taxReserve(){
-  // tudo o que foi reservado nos recibos menos o que já foi pago em impostos
-  const reservado = sum(S.movs.filter(m => m.tipo === 'receita'), m => (m.reservas?.iva||0) + (m.reservas?.ss||0) + (m.reservas?.irs||0));
-  const pago = sum(S.movs.filter(m => m.tipo === 'despesa' && m.cat === 'Impostos'), m => m.valor);
-  return r2(Math.max(0, reservado - pago));
+  // o que está reservado para impostos = IVA + SS + IRS ainda por pagar (cada um nunca abaixo de zero)
+  const t = taxBreakdown(); return r2(t.iva + t.ss + t.irs);
 }
 function taxBreakdown(){
   const rec = S.movs.filter(m => m.tipo === 'receita');
@@ -411,7 +409,7 @@ function taxBreakdown(){
   const tag = k => sum(pagos.filter(p => p.impTipo === k), p => p.valor);
   const iva = sum(rec, m => m.reservas?.iva||0) - tag('iva');
   const ss = sum(rec, m => m.reservas?.ss||0) - tag('ss');
-  const irs = sum(rec, m => m.reservas?.irs||0) - tag('irs') - sum(pagos.filter(p => !p.impTipo), p => p.valor);
+  const irs = sum(rec, m => m.reservas?.irs||0) - tag('irs'); // coimas e outros (sem tipo) não mexem nas reservas
   return { iva:r2(Math.max(0,iva)), ss:r2(Math.max(0,ss)), irs:r2(Math.max(0,irs)) };
 }
 function fixaPaidThisMonth(f, mk){ return S.movs.some(m => m.fixaId === f.id && m.data.slice(0,7) === mk); }
@@ -419,16 +417,32 @@ function fixasPendentes(mk = monthKey(today())){ return S.fixas.filter(f => !fix
 function activeDebts(){ return S.debts.filter(d => d.saldo > 0.005 && d.tipo !== 'splitwise'); }
 function fase(){ return activeDebts().length ? 1 : 2; }
 function debtPlanPending(mk = monthKey(today())){
-  // prestações agendadas + reforço, menos o que já foi pago em dívidas este mês
-  const deb = activeDebts();
-  const pagoMes = sum(movsMonth(mk).filter(m => m.tipo === 'divida'), m => m.valor);
-  const prest = sum(deb, d => Math.min(d.prestacao || 0, d.saldo + sum(movsMonth(mk).filter(m => m.dividaId === d.id), m => m.valor)));
-  const plano = prest + (deb.length ? (S.settings.reforcoDivida || 0) : 0);
-  return r2(Math.max(0, plano - pagoMes));
+  // plano do mês = prestações das dívidas que existiam no início do mês + reforço;
+  // por pagar = plano − já pago este mês, nunca mais do que ainda se deve
+  const ms = movsMonth(mk);
+  const deb = S.debts.filter(d => d.tipo !== 'splitwise');
+  const paidOf = d => sum(ms.filter(m => m.tipo === 'divida' && m.dividaId === d.id), m => m.valor);
+  const atStart = deb.filter(d => d.saldo + paidOf(d) > 0.005);
+  if (!atStart.length) return 0;
+  const plano = sum(atStart, d => Math.min(d.prestacao || 0, d.saldo + paidOf(d))) + (S.settings.reforcoDivida || 0);
+  const pago = sum(atStart, paidOf);
+  const emDivida = sum(deb.filter(d => d.saldo > 0), d => d.saldo);
+  return r2(Math.max(0, Math.min(plano - pago, emDivida)));
+}
+function payoffMonth(){
+  // mês do último pagamento de dívida (quando já não há dívidas): as metas do futuro começam no mês seguinte
+  if (fase() !== 2) return null;
+  const ids = new Set(S.debts.filter(d => d.tipo !== 'splitwise').map(d => d.id));
+  const ks = S.movs.filter(m => m.tipo === 'divida' && ids.has(m.dividaId)).map(m => m.data.slice(0,7)).sort();
+  return ks.length ? ks[ks.length-1] : null;
 }
 function goalTransfersMonth(goalId, mk){ return sum(movsMonth(mk).filter(m => m.tipo === 'transferencia' && m.metaId === goalId), m => m.valor); }
 function goalMonthly(g){
-  if (g.fase === 2) return fase() === 2 ? r2((S.settings.valorFuturo || 0) * (g.pct || 0) / 100) : 0;
+  if (g.fase === 2){
+    if (fase() !== 2) return 0;
+    const pm = payoffMonth(); if (pm && monthKey(today()) <= pm) return 0;
+    return r2((S.settings.valorFuturo || 0) * (g.pct || 0) / 100);
+  }
   return g.mensal || 0;
 }
 function goalsPending(mk = monthKey(today())){
@@ -509,7 +523,8 @@ function deadlines(fromDate = today(), count = 8){
 }
 function ivaAPagarTrimestre(y, q){
   const [a, b] = quarterRange(y, q);
-  return r2(sum(S.movs.filter(m => m.tipo === 'receita' && new Date(m.data) >= a && new Date(m.data) <= b), m => m.iva || 0));
+  const A = iso(a), B = iso(b);
+  return r2(sum(S.movs.filter(m => m.tipo === 'receita' && m.data >= A && m.data <= B), m => m.iva || 0));
 }
 function makeICS(){
   const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Pura Vida//PT','CALSCALE:GREGORIAN'];
@@ -605,7 +620,7 @@ function parseCommand(text){
     const saldo = lastAmount(rest);
     let nome = raw.replace(/^(nova|adicionar|criar|registar)\s+d[ií]vida\s*/i, '').replace(/^devo\s*/i, '')
       .replace(/presta[çc](ão|ao|ões|oes)?\s*(de\s*)?\d+([.,]\d{1,2})?\s*(€|euros?)?/gi, '').replace(/(taeg|juros?|taxa)\s*(de\s*)?\d+([.,]\d{1,2})?\s*%?/gi, '')
-      .replace(NUM_RE, '').replace(/\b(ao|à|a|aos|às|de|no|na|em)\b\s*/gi, ' ').replace(/\s+/g, ' ').trim();
+      .replace(NUM_RE, '').replace(/\s+/g, ' ').trim().replace(/^((ao|à|a|aos|às|de|do|da|no|na|em)\s+)+/i, '').replace(/\s+(de|do|da|em|no|na)$/i, '').trim();
     nome = nome ? nome.charAt(0).toUpperCase() + nome.slice(1) : 'Dívida';
     return { kind:'novaDivida', nome, saldo, prestacao, taeg, tipo: debtTypeFrom(t), valor: saldo };
   }
@@ -1252,7 +1267,8 @@ function debtForm(d){
 function vImpostos(){
   const t = today(); const y = t.getFullYear(); const q = quarterOf(t);
   const [qa, qb] = quarterRange(y, q);
-  const recQ = S.movs.filter(m => m.tipo === 'receita' && new Date(m.data) >= qa && new Date(m.data) <= qb);
+  const QA = iso(qa), QB = iso(qb);
+  const recQ = S.movs.filter(m => m.tipo === 'receita' && m.data >= QA && m.data <= QB);
   const ivaQ = sum(recQ, m => m.iva || 0); const baseQ = sum(recQ, m => m.base || 0);
   const ssMensalProx = r2(baseQ * S.rules.ssCoeficiente * S.rules.ssTaxa / 3);
   const TB = taxBreakdown();
@@ -1573,7 +1589,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:'){
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 // Exposto só para testes automáticos
-window.__vt = { parseCommand: t => parseCommand(t), describe: t => describeAction(parseCommand(t)), rawVault: async () => JSON.stringify(await readVault()), parseQuick, livre: () => livre(), simulateDebts: x => simulateDebts(x), get S(){ return S; }, deadlines: () => deadlines(), taxBreakdown: () => taxBreakdown() };
+window.__vt = { t: { saldoConta: () => saldoConta(), monthSpend: k => monthSpend(k), monthIncome: k => monthIncome(k), debtPlanPending: () => debtPlanPending(), goalsPending: () => goalsPending(), fase: () => fase(), taxReserve: () => taxReserve() }, parseCommand: t => parseCommand(t), describe: t => describeAction(parseCommand(t)), rawVault: async () => JSON.stringify(await readVault()), parseQuick, livre: () => livre(), simulateDebts: x => simulateDebts(x), get S(){ return S; }, deadlines: () => deadlines(), taxBreakdown: () => taxBreakdown() };
 </script>
 </body>
 </html>
