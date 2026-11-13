@@ -112,7 +112,7 @@ nav.tabs a.plus{width:58px;height:58px;margin-top:-24px;border-radius:29px;backg
    Tudo corre no telemóvel. Dados encriptados (AES-GCM) com
    chave derivada da palavra-passe (PBKDF2). Sem servidores.
    ========================================================= */
-const APP_VERSION = '1.3.1';
+const APP_VERSION = '1.4.0';
 const STORE_KEY = 'vt_vault_v1';
 const LOCK_AFTER_MS = 2 * 60 * 1000;
 
@@ -148,13 +148,13 @@ const DEFAULT_RULES = {
 
 const DEFAULT_CATEGORIES = [
   { nome:'Casa (conta conjunta)', orc:500, kw:['conta conjunta','casa','luz','agua','água','gas','gás','renda','condominio','condomínio'] },
-  { nome:'Supermercado', orc:320, kw:['supermercado','continente','pingo','lidl','mercadona','aldi','minipreco','minipreço','intermarche','intermarché','auchan','compras'] },
-  { nome:'Transporte', orc:180, kw:['gasolina','gasoleo','gasóleo','combustivel','combustível','via verde','portagem','uber','bolt','comboio','metro','estacionamento','oficina','pneus'] },
-  { nome:'Comer fora', orc:100, kw:['restaurante','jantar','almoço','almoco','cafe','café','take','pizza','sushi','bar','pastelaria'] },
+  { nome:'Supermercado', orc:320, kw:['supermercado','continente','pingo','pingo doce','lidl','mercadona','aldi','minipreco','minipreço','intermarche','intermarché','auchan','compras','meu super','spar','froiz','el corte ingles'] },
+  { nome:'Transporte', orc:180, kw:['gasolina','gasoleo','gasóleo','combustivel','combustível','via verde','portagem','uber','bolt','comboio','metro','estacionamento','oficina','pneus','galp','repsol','prio','cepsa','bp','e.leclerc combustivel','cp ','carris','fertagus','emel'] },
+  { nome:'Comer fora', orc:100, kw:['restaurante','jantar','almoço','almoco','cafe','café','take','pizza','sushi','bar','pastelaria','mcdonalds','burger','telepizza','glovo','uber eats','bolt food','padaria'] },
   { nome:'Subscrições', orc:40, kw:['netflix','spotify','icloud','youtube','disney','hbo','prime','chatgpt','claude','apple'] },
   { nome:'Lazer', orc:60, kw:['cinema','climbup','escalada','surf','concerto','livro','jogo','ginasio','ginásio'] },
-  { nome:'Saúde', orc:40, kw:['farmacia','farmácia','medico','médico','dentista','analises','análises','consulta','fisio'] },
-  { nome:'Bem-estar', orc:30, kw:['cabeleireiro','barbeiro','wells','massagem'] },
+  { nome:'Saúde', orc:40, kw:['farmacia','farmácia','medico','médico','dentista','analises','análises','consulta','fisio','cuf','luz saude','lusiadas','wells'] },
+  { nome:'Bem-estar', orc:30, kw:['cabeleireiro','barbeiro','massagem','spa'] },
   { nome:'Manel', orc:300, kw:['manel','escola','creche','brinquedo','fraldas'] },
   { nome:'Atividade profissional', orc:50, kw:['material','seguro acidentes','contabilista','formação','formacao','equipamento'] },
   { nome:'Impostos', orc:0, kw:['iva','seguranca social','segurança social','irs','finanças','financas','coima'] },
@@ -458,7 +458,43 @@ function livre(){
   const livre = r2(saldo - impostos - fixas - dividas - metas);
   return { saldo, impostos, fixas, dividas, metas, livre };
 }
-function monthIncome(mk){ return r2(sum(movsMonth(mk).filter(m => m.tipo === 'receita'), m => m.base ?? m.valor)); }
+function monthIncome(mk){ return r2(sum(movsMonth(mk).filter(m => m.tipo === 'receita' && m.cat !== 'Outras entradas'), m => m.base ?? m.valor)); }
+/* Quando o Livre fica negativo: o que ficou a descoberto, por ordem de importância (impostos → fixas → dívidas → metas) */
+function shortfall(L = livre()){
+  if (L.livre >= 0) return null;
+  const falta = r2(-L.livre);
+  const disp = Math.max(0, L.saldo);
+  const impFalta = r2(Math.max(0, L.impostos - disp));
+  if (impFalta > 0){
+    const TB = taxBreakdown(); const t = today();
+    // próximo pagamento de IVA ainda por fazer (se já pagaste o deste prazo, passa ao seguinte)
+    const pagos = S.movs.filter(m => m.cat === 'Impostos' && m.impTipo === 'iva').map(m => m.data);
+    const next = TB.iva > 0 ? deadlines(t, 12).find(p => p.tipo === 'iva_pag' && !pagos.some(d => d <= p.iso && (new Date(p.iso) - new Date(d)) / 86400000 <= 45)) : null;
+    const dias = next ? Math.max(1, Math.round((next.date - t) / 86400000)) : 30;
+    return { tipo:'impostos', falta, impFalta, next, dias, porDia: r2(impFalta / dias) };
+  }
+  const fixFalta = r2(Math.max(0, L.impostos + L.fixas - disp));
+  if (fixFalta > 0) return { tipo:'fixas', falta, valor: fixFalta };
+  const divFalta = r2(Math.max(0, L.impostos + L.fixas + L.dividas - disp));
+  if (divFalta > 0) return { tipo:'dividas', falta, valor: divFalta };
+  return { tipo:'metas', falta, valor: falta };
+}
+function shortfallCard(sf){
+  if (!sf) return '';
+  if (sf.tipo === 'impostos'){
+    const quando = sf.next ? `${sf.next.nome} do ${esc(sf.next.ref)}: ${shortDate(sf.next.iso)} (faltam ${sf.dias} dia${sf.dias===1?'':'s'})` : 'Repõe antes do próximo pagamento de impostos';
+    return `<a href="#impostos" class="note amber" style="display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:16px;text-decoration:none">
+      <b style="font-size:15px">Usaste ${eur0(sf.impFalta)} do dinheiro dos impostos</b>
+      <span>${quando}</span>
+      <span>Repõe cerca de <b>${eur0(Math.ceil(sf.porDia))}/dia</b> (${eur0(Math.ceil(sf.porDia * 7))}/semana). Os próximos recibos também ajudam.</span>
+      <span class="small">Deve estar no pote dos impostos: ${eur0(livre().impostos)}</span></a>`;
+  }
+  const txt = { fixas:['Faltam {v} para as despesas fixas deste mês','Ainda tens fixas por pagar e o dinheiro livre não chega.'],
+                dividas:['Faltam {v} para as dívidas deste mês','Podes baixar o reforço deste mês em Dívidas, sem falhar as prestações.'],
+                metas:['Este mês não chega para as metas: faltam {v}','Podes pôr menos na meta este mês e compensar no próximo.'] }[sf.tipo];
+  const link = sf.tipo === 'dividas' ? '#dividas' : sf.tipo === 'metas' ? '#metas' : '#mes';
+  return `<a href="${link}" class="note blue" style="display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:16px;text-decoration:none"><b style="font-size:15px">${txt[0].replace('{v}', eur0(sf.valor))}</b><span>${txt[1]}</span></a>`;
+}
 function monthSpend(mk){ return r2(sum(movsMonth(mk).filter(m => m.tipo === 'despesa' && m.cat !== 'Impostos'), m => m.valor)); }
 
 function quarterOf(d){ return Math.floor(d.getMonth() / 3) + 1; }
@@ -706,9 +742,9 @@ window.addEventListener('hashchange', () => { route = location.hash.slice(1) || 
 function render(){
   if (!S){ renderLogin(); return; }
   route = location.hash.slice(1) || 'hoje';
-  const views = { hoje:vHoje, mes:vMes, metas:vMetas, impostos:vImpostos, registar:vRegistar, movimentos:vMovimentos, dividas:vDividas, patrimonio:vPatrimonio, definicoes:vDefinicoes };
+  const views = { hoje:vHoje, mes:vMes, metas:vMetas, impostos:vImpostos, registar:vRegistar, movimentos:vMovimentos, importar:vImportar, dividas:vDividas, patrimonio:vPatrimonio, definicoes:vDefinicoes };
   const fn = views[route] || vHoje;
-  const active = { patrimonio:'metas', dividas:'metas', movimentos:'hoje', definicoes:'hoje' }[route] || route;
+  const active = { patrimonio:'metas', dividas:'metas', movimentos:'hoje', importar:'hoje', definicoes:'hoje' }[route] || route;
   app.innerHTML = fn() + (route === 'registar' ? '' : tabs(active));
   window.scrollTo(0,0);
   const after = AFTER[route]; if (after) after();
@@ -745,11 +781,12 @@ function vHoje(){
   <section class="hero" aria-label="Livre para gastar">
     <div><p style="margin:0;font-size:14px;color:#99F6E4;font-weight:600">Livre para gastar</p>
     <p class="v num" style="${neg?'color:#FCA5A5':''}">${eur0(L.livre)}</p>
-    <p style="margin:8px 0 0;font-size:13px;color:#CBD5E1">${neg ? 'Estás a usar dinheiro já reservado. Revê as metas ou o reforço deste mês.' : `até ${lastDay(t.getFullYear(), t.getMonth()+1)} ${MES3[t.getMonth()]} · cerca de <strong style="color:#fff">${eur0(L.livre / dl)}/dia</strong>`}</p></div>
+    <p style="margin:8px 0 0;font-size:13px;color:#CBD5E1">${neg ? 'Estás a usar dinheiro já reservado. Vê o cartão abaixo.' : `até ${lastDay(t.getFullYear(), t.getMonth()+1)} ${MES3[t.getMonth()]} · cerca de <strong style="color:#fff">${eur0(L.livre / dl)}/dia</strong>`}</p></div>
     <div class="stack">${stack}</div>
     <div class="legend">${legend}</div>
     <p style="margin:0;font-size:12px;color:#94A3B8">Saldo na conta ${eur0(L.saldo)} · já reservado ${eur0(L.saldo - L.livre)}</p>
   </section>
+  ${shortfallCard(shortfall(L))}
   ${isIOS() && !isStandalone() && !S.settings.ocultarInstalar ? `<section class="note blue" style="display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:16px">
     <b>Instala a app no ecrã principal</b><span>No Safari: botão Partilhar → “Adicionar ao ecrã principal”. Assim abre como uma app e os dados ficam protegidos (o Safari pode apagar dados de sites que não usas).</span>
     <button class="btn sm sec" id="hideInstall" style="align-self:flex-start">Já percebi</button></section>` : ''}
@@ -1041,6 +1078,243 @@ AFTER.registar = () => {
   }
 };
 
+/* ---------- Importar extrato do banco (tudo no telemóvel) ---------- */
+async function unzipFile(buf){
+  const dv = new DataView(buf); let e = buf.byteLength - 22;
+  while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+  if (e < 0) throw new Error('zip');
+  const n = dv.getUint16(e + 10, true); let off = dv.getUint32(e + 16, true); const files = {};
+  const dec = new TextDecoder();
+  for (let i = 0; i < n; i++){
+    const method = dv.getUint16(off + 10, true), csize = dv.getUint32(off + 20, true);
+    const nl = dv.getUint16(off + 28, true), el = dv.getUint16(off + 30, true), cl = dv.getUint16(off + 32, true), lho = dv.getUint32(off + 42, true);
+    files[dec.decode(new Uint8Array(buf, off + 46, nl))] = { method, csize, lho }; off += 46 + nl + el + cl;
+  }
+  return async name => {
+    const f = files[name]; if (!f) return null;
+    const nl = dv.getUint16(f.lho + 26, true), el = dv.getUint16(f.lho + 28, true);
+    const data = new Uint8Array(buf, f.lho + 30 + nl + el, f.csize);
+    if (f.method === 0) return dec.decode(data);
+    const ds = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return await new Response(ds).text();
+  };
+}
+async function readXlsx(buf){
+  const get = await unzipFile(buf); const xml = s => new DOMParser().parseFromString(s, 'application/xml');
+  const sst = await get('xl/sharedStrings.xml');
+  const strings = sst ? [...xml(sst).getElementsByTagName('si')].map(si => si.textContent) : [];
+  let sheet = null;
+  for (let i = 1; i <= 5 && !sheet; i++) sheet = await get(`xl/worksheets/sheet${i}.xml`);
+  if (!sheet) throw new Error('folha');
+  const col = r => { const L = r.replace(/\d+/g, ''); let c = 0; for (const ch of L) c = c * 26 + ch.charCodeAt(0) - 64; return c - 1; };
+  return [...xml(sheet).getElementsByTagName('row')].map(row => {
+    const out = [];
+    for (const c of row.getElementsByTagName('c')){
+      const t = c.getAttribute('t'), v = c.getElementsByTagName('v')[0], is = c.getElementsByTagName('is')[0];
+      let val = t === 's' ? strings[+v?.textContent] : t === 'inlineStr' ? is?.textContent : v ? v.textContent : '';
+      if ((!t || t === 'n') && val !== '' && !isNaN(+val)) val = +val;
+      out[col(c.getAttribute('r') || 'A1')] = val ?? '';
+    }
+    return [...out].map(x => x ?? '');
+  });
+}
+function parseCSVText(text){
+  const lines = text.split(/\r?\n/).slice(0, 40);
+  const count = ch => lines.reduce((a, l) => a + (l.split(ch).length - 1), 0);
+  const delim = [';', '\t', ','].sort((a, b) => count(b) - count(a))[0];
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++){
+    const ch = text[i];
+    if (q){ if (ch === '"'){ if (text[i+1] === '"'){ cell += '"'; i++; } else q = false; } else cell += ch; continue; }
+    if (ch === '"') q = true; else if (ch === delim){ row.push(cell); cell = ''; }
+    else if (ch === '\n'){ row.push(cell.replace(/\r$/, '')); rows.push(row); row = []; cell = ''; }
+    else cell += ch;
+  }
+  if (cell || row.length){ row.push(cell); rows.push(row); }
+  return rows;
+}
+async function readStatement(file){
+  const name = file.name.toLowerCase(); const buf = await file.arrayBuffer();
+  const head = new Uint8Array(buf.slice(0, 4));
+  if (head[0] === 0x50 && head[1] === 0x4b) return readXlsx(buf);               // .xlsx (zip)
+  if (head[0] === 0x25 && head[1] === 0x50) throw new Error('pdf');             // %PDF
+  if (head[0] === 0xD0 && head[1] === 0xCF) throw new Error('xls-antigo');       // .xls binário antigo
+  let text = new TextDecoder('utf-8').decode(buf);
+  if (text.includes(String.fromCharCode(0xFFFD))) text = new TextDecoder('windows-1252').decode(buf);
+  if (/<table/i.test(text)){                                                     // "Excel" que é uma tabela HTML
+    const doc = new DOMParser().parseFromString(text, 'text/html');
+    return [...doc.querySelectorAll('tr')].map(tr => [...tr.querySelectorAll('th,td')].map(td => td.textContent.trim()));
+  }
+  return parseCSVText(text.replace(/^﻿/, ''));
+}
+function parseDateCell(v){
+  if (typeof v === 'string' && /^\d{5}(\.\d+)?$/.test(v.trim())) v = +v;
+  if (typeof v === 'number' && v > 20000 && v < 80000){ const d = new Date(Date.UTC(1899, 11, 30) + v * 86400000); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}`; }
+  const s = String(v || '').trim(); let m;
+  if ((m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/))) return `${m[1]}-${pad(+m[2])}-${pad(+m[3])}`;
+  if ((m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/))){ const y = m[3].length === 2 ? 2000 + +m[3] : +m[3]; if (+m[2] > 12) return null; return `${y}-${pad(+m[2])}-${pad(+m[1])}`; }
+  return null;
+}
+function parseAmountCell(v){
+  if (typeof v === 'number') return v;
+  let s = String(v || '').replace(/\s|€|EUR/gi, '').replace(/−/g, '-');
+  if (!s) return NaN;
+  let neg = false;
+  if (/^\(.*\)$/.test(s)){ neg = true; s = s.slice(1, -1); }
+  if (/-$/.test(s)){ neg = true; s = s.slice(0, -1); }
+  if (s.includes(',') && s.includes('.')) s = s.lastIndexOf(',') > s.lastIndexOf('.') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+  else if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+  const n = parseFloat(s); return isNaN(n) ? NaN : (neg ? -Math.abs(n) : n);
+}
+function detectColumns(rows){
+  const N = c => norm(String(c));
+  for (let i = 0; i < Math.min(rows.length, 40); i++){
+    const r = rows[i].map(N);
+    const find = (re, not) => r.findIndex(c => re.test(c) && !(not && not.test(c)));
+    let date = find(/^data\s*(mov|movimento|operacao|lancamento|lanc|transacao)/);
+    if (date < 0) date = find(/^data\b|^date/, /valor/);
+    if (date < 0) date = find(/^data/);
+    const desc = find(/descri|movimento|historico|designacao|detalhe|description|concept|operacao/, /^data/);
+    const amount = find(/montante|^valor\b|importancia|amount|quantia/, /data|saldo/);
+    const debit = find(/debito|^saida|levantamento/);
+    const credit = find(/credito|^entrada|deposito/);
+    if (date >= 0 && desc >= 0 && (amount >= 0 || debit >= 0 || credit >= 0)) return { start: i + 1, date, desc, amount, debit, credit };
+  }
+  // sem cabeçalho: adivinha pelas colunas
+  const sample = rows.filter(r => r.length >= 3).slice(0, 30);
+  if (!sample.length) return null;
+  const cols = Math.max(...sample.map(r => r.length));
+  const score = f => [...Array(cols)].map((_, c) => sample.filter(r => f(r[c])).length);
+  const ds = score(v => !!parseDateCell(v)), ns = score(v => !isNaN(parseAmountCell(v)) && String(v).trim() !== ''), ts = score(v => typeof v === 'string' && /[a-z]{3}/i.test(v));
+  const date = ds.indexOf(Math.max(...ds)); const desc = ts.indexOf(Math.max(...ts));
+  const amount = ns.findIndex((v, c) => c !== date && v === Math.max(...ns.filter((_, k) => k !== date)));
+  if (ds[date] < 2 || amount < 0) return null;
+  return { start: 0, date, desc, amount, debit:-1, credit:-1 };
+}
+function statementItems(rows){
+  const C = detectColumns(rows); if (!C) throw new Error('colunas');
+  const out = [];
+  for (const r of rows.slice(C.start)){
+    const data = parseDateCell(r[C.date]); if (!data) continue;
+    let v = NaN;
+    if (C.amount >= 0) v = parseAmountCell(r[C.amount]);
+    if (isNaN(v)){
+      const d = C.debit >= 0 ? parseAmountCell(r[C.debit]) : NaN, c = C.credit >= 0 ? parseAmountCell(r[C.credit]) : NaN;
+      if (!isNaN(d) && d !== 0) v = -Math.abs(d); else if (!isNaN(c) && c !== 0) v = Math.abs(c);
+    }
+    if (isNaN(v) || v === 0) continue;
+    out.push({ data, desc: String(r[C.desc] ?? '').replace(/\s+/g, ' ').trim() || 'Movimento', valor: r2(v) });
+  }
+  return out;
+}
+const ruleKey = desc => norm(desc).replace(/\d+/g, ' ').replace(/[^a-z ]/g, ' ').split(/\s+/).filter(w => w.length > 1).slice(0, 3).join(' ');
+function classifyItem(it){
+  const n = norm(it.desc); const abs = Math.abs(it.valor);
+  const rule = (S.importRules || {})[ruleKey(it.desc)];
+  if (rule){
+    const ok = (rule.kind !== 'divida' || S.debts.some(d => d.id === rule.debtId)) && (rule.kind !== 'fixa' || S.fixas.some(f => f.id === rule.fixaId));
+    if (ok && (rule.kind === 'interno' || rule.kind === 'ignorar' || (it.valor > 0) === ['recibo','recibo_si','entrada'].includes(rule.kind))) return { ...rule, aprendido:true };
+  }
+  if (/\bpote\b|poupanca|mealheiro|cofre|objetivo|conta a prazo|entre contas|conta propria/.test(n)) return { kind:'interno' };
+  if (it.valor > 0){
+    if (/reembolso|devolucao|estorno|juros|mb ?way|anulacao|cashback/.test(n)) return { kind:'entrada' };
+    return { kind:'recibo' };
+  }
+  const debt = matchDebt(n);
+  const tax = /\biva\b/.test(n) ? 'iva' : /seg(uranca)?\.? ?soc|\bss\b|\biss\b/.test(n) ? 'ss' : /\birs\b/.test(n) ? 'irs' : (/autoridade tributaria|\bat\b|financas|dgci|estado/.test(n) ? '' : null);
+  if (debt && (tax === null || Math.abs((debt.prestacao || 0) - abs) < 0.01)) return { kind:'divida', debtId:debt.id };
+  if (tax !== null) return { kind:'imposto', impTipo: tax || (debt ? '' : 'iva') };
+  const fx = matchFixa(n);
+  if (fx && Math.abs(fx.valor - abs) <= Math.max(1, fx.valor * 0.02)) return { kind:'fixa', fixaId:fx.id };
+  return { kind:'despesa', cat: guessCategory(it.desc) };
+}
+function isDuplicate(it){
+  const abs = Math.abs(it.valor), t = new Date(it.data + 'T12:00:00');
+  return S.movs.some(m => {
+    if (m.importKey && m.importKey === `${it.data}|${it.valor}|${norm(it.desc)}`) return true;
+    const dd = Math.abs(new Date(m.data + 'T12:00:00') - t) / 86400000; if (dd > 3) return false;
+    const pos = m.tipo === 'receita';
+    return pos === (it.valor > 0) && Math.abs(m.valor - abs) < 0.011;
+  });
+}
+const IMP_KINDS = [['despesa','Despesa'],['fixa','Fixa paga'],['recibo','Recibo c/ IVA'],['recibo_si','Recibo s/ IVA'],['entrada','Outra entrada'],['divida','Dívida'],['imposto','Imposto'],['interno','Interno (pote)'],['ignorar','Ignorar']];
+let IMP = null;
+async function startImport(file){
+  try {
+    const rows = await readStatement(file);
+    const items = statementItems(rows);
+    if (!items.length) throw new Error('vazio');
+    items.sort((a, b) => b.data.localeCompare(a.data));
+    IMP = { file: file.name, items: items.map(it => {
+      const c = classifyItem(it); const fxPaid = c.kind === 'fixa' && S.movs.some(m => m.fixaId === c.fixaId && m.data.slice(0,7) === it.data.slice(0,7)); const dup = isDuplicate(it) || fxPaid; const antes = S.criado && it.data < S.criado;
+      return { ...it, ...c, cat: c.cat || (c.kind === 'despesa' ? 'Outros' : undefined), dup, antes, on: !dup && !antes && c.kind !== 'interno' && c.kind !== 'ignorar' };
+    }) };
+    go('importar');
+  } catch(e){
+    const msg = { pdf:'Ainda não leio PDF. Exporta em Excel ou CSV no site do banco.', 'xls-antigo':'Este Excel é do formato antigo (.xls). Abre-o no Numbers ou Excel e exporta como CSV.', colunas:'Não encontrei as colunas de data, descrição e valor neste ficheiro.', vazio:'Não encontrei movimentos neste ficheiro.' }[e.message] || 'Não consegui ler este ficheiro.';
+    toast(msg);
+  }
+}
+function vImportar(){
+  if (!IMP) return `<main class="view">${backHeader('Importar extrato','movimentos')}<p class="empty">Escolhe um ficheiro em Movimentos.</p></main>`;
+  const it = IMP.items; const sel = it.filter(x => x.on);
+  const cnt = k => it.filter(k).length;
+  const opt = (list, v) => list.map(([k, l]) => `<option value="${esc(k)}" ${String(k) === String(v) ? 'selected' : ''}>${esc(l)}</option>`).join('');
+  const rows = it.map((x, i) => {
+    let extra = '';
+    if (x.kind === 'despesa') extra = `<select class="input" data-i="${i}" data-f="cat" style="height:40px;font-size:14px">${opt(S.categories.map(c => [c.nome, c.nome]), x.cat)}</select>`;
+    if (x.kind === 'divida') extra = `<select class="input" data-i="${i}" data-f="debtId" style="height:40px;font-size:14px">${opt(S.debts.map(d => [d.id, d.nome]), x.debtId)}</select>`;
+    if (x.kind === 'fixa') extra = `<select class="input" data-i="${i}" data-f="fixaId" style="height:40px;font-size:14px">${opt(S.fixas.map(f => [f.id, f.nome]), x.fixaId)}</select>`;
+    if (x.kind === 'imposto') extra = `<select class="input" data-i="${i}" data-f="impTipo" style="height:40px;font-size:14px">${opt([['iva','IVA'],['ss','Segurança Social'],['irs','IRS'],['','Outro (coima…)']], x.impTipo)}</select>`;
+    const tag = x.dup ? '<span class="pill amber">Já registado?</span>' : x.antes ? '<span class="pill amber">Antes de usares a app</span>' : x.aprendido ? '<span class="pill teal">Como da última vez</span>' : '';
+    return `<div class="card" style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;${x.on ? '' : 'opacity:.6'}">
+      <div class="row" style="align-items:flex-start;gap:10px"><input type="checkbox" data-i="${i}" data-f="on" ${x.on ? 'checked' : ''} aria-label="Importar este movimento" style="width:22px;height:22px;margin-top:2px;accent-color:var(--teal);flex-shrink:0">
+        <div class="grow" style="flex:1;min-width:0"><p class="t15" style="margin:0;overflow-wrap:anywhere">${esc(x.desc)}</p><p class="small muted" style="margin:2px 0 0">${shortDate(x.data)} ${tag}</p></div>
+        <p class="num" style="margin:0;font-size:15px;${x.valor > 0 ? 'color:var(--teal)' : ''}">${x.valor > 0 ? '+' : '−'} ${eur(Math.abs(x.valor))}</p></div>
+      ${x.on ? `<div class="grid2"><select class="input" data-i="${i}" data-f="kind" style="height:40px;font-size:14px">${opt(IMP_KINDS, x.kind)}</select>${extra || '<span></span>'}</div>` : ''}
+    </div>`;
+  }).join('');
+  return `<main class="view">${backHeader('Importar extrato','movimentos')}
+  <p class="small muted" style="margin:0">${esc(IMP.file)} · ${it.length} movimentos · ${cnt(x => x.dup)} já registados · ${cnt(x => x.kind === 'interno')} internos (pote)${cnt(x => x.antes) ? ` · ${cnt(x => x.antes)} antes de começares` : ''}</p>
+  <p class="note blue">Confirma o tipo de cada um. Movimentos para o pote ficam como “Interno” e não contam. Da próxima vez lembro-me das tuas escolhas.</p>
+  <div id="impList" style="display:flex;flex-direction:column;gap:10px">${rows}</div>
+  <div style="position:sticky;bottom:calc(env(safe-area-inset-bottom) + 86px);display:flex;flex-direction:column;gap:8px"><button class="btn" id="impGo" ${sel.length ? '' : 'disabled style="opacity:.5"'}>Importar ${sel.length} movimento${sel.length === 1 ? '' : 's'}</button></div>
+  </main>`;
+}
+AFTER.importar = () => {
+  const list = $('#impList'); if (!list) return;
+  list.addEventListener('change', e => {
+    const el = e.target; const i = +el.dataset.i, f = el.dataset.f; if (isNaN(i) || !f) return;
+    const x = IMP.items[i];
+    if (f === 'on') x.on = el.checked; else x[f] = el.value;
+    if (f === 'kind'){
+      if (x.kind === 'despesa' && !x.cat) x.cat = guessCategory(x.desc);
+      if (x.kind === 'divida' && !x.debtId) x.debtId = (matchDebt(norm(x.desc)) || S.debts[0] || {}).id;
+      if (x.kind === 'fixa' && !x.fixaId) x.fixaId = (matchFixa(norm(x.desc)) || S.fixas[0] || {}).id;
+      if (x.kind === 'imposto' && x.impTipo === undefined) x.impTipo = 'iva';
+      if (x.kind === 'interno' || x.kind === 'ignorar') x.on = false;
+    }
+    const y = window.scrollY; render(); window.scrollTo(0, y);
+  });
+  const btn = $('#impGo'); if (btn) btn.onclick = () => {
+    let n = 0; S.importRules = S.importRules || {};
+    for (const x of IMP.items){
+      S.importRules[ruleKey(x.desc)] = { kind:x.kind, cat:x.cat, debtId:x.debtId, fixaId:x.fixaId, impTipo:x.impTipo };
+      if (!x.on) continue;
+      const abs = r2(Math.abs(x.valor)); const key = `${x.data}|${x.valor}|${norm(x.desc)}`; let m = null;
+      if (x.kind === 'despesa') m = { id:uid(), data:x.data, tipo:'despesa', valor:abs, cat:x.cat || 'Outros', desc:x.desc };
+      else if (x.kind === 'fixa'){ const f = S.fixas.find(z => z.id === x.fixaId); if (!f) continue; m = { id:uid(), data:x.data, tipo:'despesa', valor:abs, cat:f.cat, desc:f.nome, fixaId:f.id }; }
+      else if (x.kind === 'imposto') m = { id:uid(), data:x.data, tipo:'despesa', valor:abs, cat:'Impostos', impTipo:x.impTipo || '', desc:x.desc };
+      else if (x.kind === 'recibo' || x.kind === 'recibo_si'){ const com = x.kind === 'recibo'; const mv = addReceita(S, { data:x.data, desc:x.desc, base: com ? r2(abs / (1 + S.rules.ivaTaxa)) : abs, comIva:com }); mv.valor = abs; if (com) mv.iva = mv.reservas.iva = r2(abs - mv.base); mv.importKey = key; n++; continue; }
+      else if (x.kind === 'entrada') m = { id:uid(), data:x.data, tipo:'receita', valor:abs, base:abs, iva:0, comIva:false, cat:'Outras entradas', desc:x.desc, reservas:{ iva:0, ss:0, irs:0 } };
+      else if (x.kind === 'divida'){ const d = S.debts.find(z => z.id === x.debtId); if (!d) continue; const v = r2(d.tipo === 'splitwise' ? abs : Math.min(abs, Math.max(0, d.saldo))); S.movs.push({ id:uid(), data:x.data, tipo:'divida', valor:v, dividaId:d.id, desc:d.nome, importKey:key }); d.saldo = r2(d.saldo - v); n++; continue; }
+      if (m){ m.importKey = key; S.movs.push(m); n++; }
+    }
+    save(); IMP = null; toast(`${n} movimento${n === 1 ? '' : 's'} importado${n === 1 ? '' : 's'}`); go('movimentos');
+  };
+};
+
 /* ---------- Ecrã: Movimentos ---------- */
 function vMovimentos(){
   const q = (routeArg && routeArg.q) || '';
@@ -1048,12 +1322,14 @@ function vMovimentos(){
   const groups = {};
   for (const m of list){ const k = m.data.slice(0,7); (groups[k] = groups[k] || []).push(m); }
   return `<main class="view">${backHeader('Movimentos','hoje')}
+  <label class="btn sec" style="display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer">${ic('doc',18)} Importar extrato do banco<input type="file" id="stmtIn" accept=".csv,.txt,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="sr"></label>
   <input class="input" id="mvQ" placeholder="Pesquisar" value="${esc(q)}" aria-label="Pesquisar movimentos">
   ${Object.keys(groups).length ? Object.entries(groups).map(([k, ms]) => { const [y,mm] = k.split('-').map(Number); return `<section class="card tight"><p class="lbl" style="padding-top:10px;text-transform:capitalize">${MESES[mm-1]} ${y}</p><div class="list">${ms.map(movRow).join('')}</div></section>`; }).join('') : '<p class="empty">Sem movimentos.</p>'}
   </main>`;
 }
 AFTER.movimentos = () => {
   bindMovRows();
+  const si = $('#stmtIn'); if (si) si.onchange = e => { const f = e.target.files[0]; if (f) startImport(f); };
   const q = $('#mvQ'); let tm; q.oninput = () => { clearTimeout(tm); tm = setTimeout(() => { routeArg = { q: q.value }; render(); const n = $('#mvQ'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 250); };
 };
 
@@ -1275,7 +1551,7 @@ function vImpostos(){
   const dls = deadlines(t, 6);
   const prevQ = q === 1 ? [y-1, 4] : [y, q-1];
   const ivaPrev = ivaAPagarTrimestre(...prevQ);
-  const recY = S.movs.filter(m => m.tipo === 'receita' && m.data.startsWith(String(y)));
+  const recY = S.movs.filter(m => m.tipo === 'receita' && m.cat !== 'Outras entradas' && m.data.startsWith(String(y)));
   const outdated = S.rules.ano < y;
   return `<main class="view">
   <div class="between"><h1>Impostos</h1><span class="pill ${outdated?'amber':'teal'}">Regras ${esc(S.rules.ano)}${outdated?' · rever':' ✓'}</span></div>
@@ -1287,7 +1563,9 @@ function vImpostos(){
       <div><p class="lbl">SS por mês a seguir</p><p class="num" style="font-size:22px;margin:2px 0 0">${eur0(ssMensalProx)}</p><p class="small muted" style="margin:2px 0 0">estimativa pelos recibos</p></div>
     </div>
   </section>
-  <section class="card" aria-label="Reservado"><p class="t15" style="margin:0 0 8px">Reservado na conta</p>
+  <section class="card" aria-label="Reservado">
+    <div class="between" style="align-items:flex-end;margin-bottom:8px"><div><p class="lbl">Deve estar no pote dos impostos</p><p class="num" style="font-size:28px;margin:2px 0 0">${eur(TB.iva + TB.ss + TB.irs)}</p></div></div>
+    <p class="small muted" style="margin:0 0 8px">Compara com o pote no ActivoBank e transfere a diferença. Passar dinheiro entre a conta e o pote não se regista aqui.</p>
     <div class="list">
       <div class="item"><p class="grow">IVA</p><p class="t15">${eur(TB.iva)}</p></div>
       <div class="item"><p class="grow">Segurança Social</p><p class="t15">${eur(TB.ss)}</p></div>
@@ -1572,7 +1850,9 @@ function onboarding(){
     };
   };
 }
-function migrate(){ if (!S.v) S.v = 1; if (S.onboarded === undefined) S.onboarded = true; S.settings = { ...freshState().settings, ...S.settings }; }
+function migrate(){ if (!S.v) S.v = 1; if (S.onboarded === undefined) S.onboarded = true;
+  for (const dc of DEFAULT_CATEGORIES){ const c = S.categories.find(x => x.nome === dc.nome); if (c){ c.kw = c.kw || []; for (const k of dc.kw) if (!c.kw.includes(k)) c.kw.push(k); } }
+  S.importRules = S.importRules || {}; S.settings = { ...freshState().settings, ...S.settings }; }
 function lock(){ S = null; KEY = null; DEK_RAW = null; closeSheet(true); renderLogin(); }
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) hiddenAt = Date.now();
@@ -1589,7 +1869,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:'){
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 // Exposto só para testes automáticos
-window.__vt = { t: { saldoConta: () => saldoConta(), monthSpend: k => monthSpend(k), monthIncome: k => monthIncome(k), debtPlanPending: () => debtPlanPending(), goalsPending: () => goalsPending(), fase: () => fase(), taxReserve: () => taxReserve() }, parseCommand: t => parseCommand(t), describe: t => describeAction(parseCommand(t)), rawVault: async () => JSON.stringify(await readVault()), parseQuick, livre: () => livre(), simulateDebts: x => simulateDebts(x), get S(){ return S; }, deadlines: () => deadlines(), taxBreakdown: () => taxBreakdown() };
+window.__vt = { imp: { readStatement: f => readStatement(f), statementItems: r => statementItems(r), classify: i => classifyItem(i), get IMP(){ return IMP; } }, t: { saldoConta: () => saldoConta(), monthSpend: k => monthSpend(k), monthIncome: k => monthIncome(k), debtPlanPending: () => debtPlanPending(), goalsPending: () => goalsPending(), fase: () => fase(), taxReserve: () => taxReserve() }, parseCommand: t => parseCommand(t), describe: t => describeAction(parseCommand(t)), rawVault: async () => JSON.stringify(await readVault()), parseQuick, livre: () => livre(), simulateDebts: x => simulateDebts(x), get S(){ return S; }, deadlines: () => deadlines(), taxBreakdown: () => taxBreakdown() };
 </script>
 </body>
 </html>
