@@ -112,7 +112,7 @@ nav.tabs a.plus{width:58px;height:58px;margin-top:-24px;border-radius:29px;backg
    Tudo corre no telemóvel. Dados encriptados (AES-GCM) com
    chave derivada da palavra-passe (PBKDF2). Sem servidores.
    ========================================================= */
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.4.1';
 const STORE_KEY = 'vt_vault_v1';
 const LOCK_AFTER_MS = 2 * 60 * 1000;
 
@@ -150,7 +150,8 @@ const DEFAULT_CATEGORIES = [
   { nome:'Casa (conta conjunta)', orc:500, kw:['conta conjunta','casa','luz','agua','água','gas','gás','renda','condominio','condomínio'] },
   { nome:'Supermercado', orc:320, kw:['supermercado','continente','pingo','pingo doce','lidl','mercadona','aldi','minipreco','minipreço','intermarche','intermarché','auchan','compras','meu super','spar','froiz','el corte ingles'] },
   { nome:'Transporte', orc:180, kw:['gasolina','gasoleo','gasóleo','combustivel','combustível','via verde','portagem','uber','bolt','comboio','metro','estacionamento','oficina','pneus','galp','repsol','prio','cepsa','bp','e.leclerc combustivel','cp ','carris','fertagus','emel'] },
-  { nome:'Comer fora', orc:100, kw:['restaurante','jantar','almoço','almoco','cafe','café','take','pizza','sushi','bar','pastelaria','mcdonalds','burger','telepizza','glovo','uber eats','bolt food','padaria'] },
+  { nome:'Comer fora', orc:100, kw:['restaurante','jantar','almoço','almoco','cafe','café','pizza','sushi','bar','pastelaria','mcdonalds','burger','telepizza','padaria'] },
+  { nome:'Entregas (Uber Eats, Glovo)', orc:40, kw:['uber eats','ubereats','glovo','bolt food','take away','takeaway','take-away','entrega','delivery'] },
   { nome:'Subscrições', orc:40, kw:['netflix','spotify','icloud','youtube','disney','hbo','prime','chatgpt','claude','apple'] },
   { nome:'Lazer', orc:60, kw:['cinema','climbup','escalada','surf','concerto','livro','jogo','ginasio','ginásio'] },
   { nome:'Saúde', orc:40, kw:['farmacia','farmácia','medico','médico','dentista','analises','análises','consulta','fisio','cuf','luz saude','lusiadas','wells'] },
@@ -412,7 +413,9 @@ function taxBreakdown(){
   const irs = sum(rec, m => m.reservas?.irs||0) - tag('irs'); // coimas e outros (sem tipo) não mexem nas reservas
   return { iva:r2(Math.max(0,iva)), ss:r2(Math.max(0,ss)), irs:r2(Math.max(0,irs)) };
 }
-function fixaPaidThisMonth(f, mk){ return S.movs.some(m => m.fixaId === f.id && m.data.slice(0,7) === mk); }
+const marked = (id, mk = monthKey(today())) => ((S.marcas || {})[mk] || []).includes(id);
+function markPaid(id, mk = monthKey(today())){ S.marcas = S.marcas || {}; (S.marcas[mk] = S.marcas[mk] || []).includes(id) || S.marcas[mk].push(id); }
+function fixaPaidThisMonth(f, mk){ return marked(f.id, mk) || S.movs.some(m => m.fixaId === f.id && m.data.slice(0,7) === mk); }
 function fixasPendentes(mk = monthKey(today())){ return S.fixas.filter(f => !fixaPaidThisMonth(f, mk)); }
 function activeDebts(){ return S.debts.filter(d => d.saldo > 0.005 && d.tipo !== 'splitwise'); }
 function fase(){ return activeDebts().length ? 1 : 2; }
@@ -424,7 +427,7 @@ function debtPlanPending(mk = monthKey(today())){
   const paidOf = d => sum(ms.filter(m => m.tipo === 'divida' && m.dividaId === d.id), m => m.valor);
   const atStart = deb.filter(d => d.saldo + paidOf(d) > 0.005);
   if (!atStart.length) return 0;
-  const plano = sum(atStart, d => Math.min(d.prestacao || 0, d.saldo + paidOf(d))) + (S.settings.reforcoDivida || 0);
+  const plano = sum(atStart.filter(d => !marked(d.id, mk)), d => Math.min(d.prestacao || 0, d.saldo + paidOf(d))) + (S.settings.reforcoDivida || 0);
   const pago = sum(atStart, paidOf);
   const emDivida = sum(deb.filter(d => d.saldo > 0), d => d.saldo);
   return r2(Math.max(0, Math.min(plano - pago, emDivida)));
@@ -580,6 +583,13 @@ function makeICS(){
 /* ---------- Interpretar texto ("gasolina 45") ---------- */
 function guessCategory(text){
   const t = norm(text);
+  const learned = (S.importRules || {})[ruleKey(text)]; if (learned && learned.kind === 'despesa' && S.categories.some(c => c.nome === learned.cat)) return learned.cat;
+  let best = null, len = 0;
+  for (const c of S.categories) for (const k of (c.kw || [])){
+    const nk = norm(k); if (!nk || nk.length <= len) continue;
+    if (new RegExp(`(^|[^a-z0-9])${nk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}([^a-z0-9]|$)`).test(t)){ best = c.nome; len = nk.length; }
+  }
+  if (best) return best;
   for (const c of S.categories){
     for (const k of (c.kw || [])) if (k && new RegExp(`(^|[^a-z0-9])${norm(k).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')}([^a-z0-9]|$)`).test(t)) return c.nome;
   }
@@ -737,7 +747,8 @@ function tabs(active){
   return `<nav class="tabs" aria-label="Navegação principal">${t('hoje','home','Hoje')}${t('mes','cal','Mês')}<a href="#registar" class="plus" aria-label="Novo registo">${ic('plus',26,2.4)}</a>${t('metas','target','Metas')}${t('impostos','doc','Impostos')}</nav>`;
 }
 function go(r, arg){ routeArg = arg ?? null; if (location.hash.slice(1) === r) render(); else location.hash = r; }
-window.addEventListener('hashchange', () => { route = location.hash.slice(1) || 'hoje'; render(); });
+window.addEventListener('hashchange', () => { closeSheet(true); route = location.hash.slice(1) || 'hoje'; render(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#sheetBg')) closeSheet(); });
 
 function render(){
   if (!S){ renderLogin(); return; }
@@ -769,7 +780,7 @@ function vHoje(){
   const next = deadlines(t, 1)[0];
   const daysTo = next ? Math.round((next.date - t) / 86400000) : 0;
   const pend = fixasPendentes();
-  const deb = fase() === 1 ? sortedDebts(activeDebts()).filter(d => d.prestacao > 0 && !movsMonth(monthKey(t)).some(m => m.dividaId === d.id)) : [];
+  const deb = fase() === 1 ? sortedDebts(activeDebts()).filter(d => d.prestacao > 0 && !marked(d.id) && !movsMonth(monthKey(t)).some(m => m.dividaId === d.id)) : [];
   const recent = [...S.movs].sort((a,b) => b.data.localeCompare(a.data) || 0).slice(0, 5);
   const neg = L.livre < 0;
   return `<main class="view">
@@ -784,7 +795,8 @@ function vHoje(){
     <p style="margin:8px 0 0;font-size:13px;color:#CBD5E1">${neg ? 'Estás a usar dinheiro já reservado. Vê o cartão abaixo.' : `até ${lastDay(t.getFullYear(), t.getMonth()+1)} ${MES3[t.getMonth()]} · cerca de <strong style="color:#fff">${eur0(L.livre / dl)}/dia</strong>`}</p></div>
     <div class="stack">${stack}</div>
     <div class="legend">${legend}</div>
-    <p style="margin:0;font-size:12px;color:#94A3B8">Saldo na conta ${eur0(L.saldo)} · já reservado ${eur0(L.saldo - L.livre)}</p>
+    <div class="between"><p style="margin:0;font-size:12px;color:#94A3B8">Saldo na conta ${eur0(L.saldo)} · já reservado ${eur0(L.saldo - L.livre)}</p>
+    <button type="button" id="heroWhy" style="border:none;background:#22334A;color:#99F6E4;font-size:12px;font-weight:600;border-radius:99px;padding:6px 10px;cursor:pointer;white-space:nowrap">Porquê?</button></div>
   </section>
   ${shortfallCard(shortfall(L))}
   ${isIOS() && !isStandalone() && !S.settings.ocultarInstalar ? `<section class="note blue" style="display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:16px">
@@ -862,16 +874,48 @@ AFTER.hoje = () => {
   const hi = $('#hideInstall'); if (hi) hi.onclick = () => { S.settings.ocultarInstalar = true; save(); render(); };
   const db = $('#doBackup'); if (db) db.onclick = exportBackup;
   bindMovRows();
-  document.querySelectorAll('[data-payfixa]').forEach(b => b.onclick = () => {
-    const f = S.fixas.find(x => x.id === b.dataset.payfixa);
-    S.movs.push({ id:uid(), data:iso(today()), tipo:'despesa', valor:f.valor, cat:f.cat, desc:f.nome, fixaId:f.id });
-    save(); toast(`${f.nome} marcado como pago`); render();
-  });
-  document.querySelectorAll('[data-paydebt]').forEach(b => b.onclick = () => {
-    const d = S.debts.find(x => x.id === b.dataset.paydebt);
-    payDebt(d, Math.min(d.prestacao, d.saldo)); toast(`Prestação de ${d.nome} registada`); render();
-  });
+  document.querySelectorAll('[data-payfixa]').forEach(b => b.onclick = () => payChoice('fixa', b.dataset.payfixa));
+  document.querySelectorAll('[data-paydebt]').forEach(b => b.onclick = () => payChoice('divida', b.dataset.paydebt));
+  const hx = $('#heroWhy'); if (hx) hx.onclick = livreSheet;
 };
+/* "Pago": pagaste agora (sai da conta) ou já estava pago antes de começares (não mexe no saldo)? */
+function payChoice(kind, id){
+  const f = kind === 'fixa' ? S.fixas.find(x => x.id === id) : null, d = kind === 'divida' ? S.debts.find(x => x.id === id) : null;
+  const nome = (f || d).nome, v = f ? f.valor : Math.min(d.prestacao, d.saldo);
+  openSheet(`<div class="between"><h2>${esc(nome)} · ${eur(v)}</h2><button class="iconbtn" data-close aria-label="Fechar">${ic('x')}</button></div>
+    <button class="btn" id="pcNow">Paguei agora</button>
+    <p class="small muted" style="margin:-4px 0 4px">Sai da conta e entra nos gastos do mês.</p>
+    <button class="btn sec" id="pcBefore">Já estava pago antes</button>
+    <p class="small muted" style="margin:-4px 0 0">Pagaste antes de pores o saldo na app, ou o pagamento já está noutro registo. Só deixa de contar como “por pagar” este mês, sem mexer no saldo${d ? ' nem no valor da dívida' : ''}.</p>`, sh => {
+      $('#pcNow', sh).onclick = () => {
+        if (f) S.movs.push({ id:uid(), data:iso(today()), tipo:'despesa', valor:f.valor, cat:f.cat, desc:f.nome, fixaId:f.id });
+        else payDebt(d, v);
+        save(); closeSheet(true); toast(`${nome}: pago`); render();
+      };
+      $('#pcBefore', sh).onclick = () => { markPaid(id); save(); closeSheet(true); toast(`${nome}: já não conta como por pagar este mês`); render(); };
+    });
+}
+/* "Porquê este número?" — o cálculo do Livre para gastar, linha a linha */
+function livreSheet(){
+  const L = livre(), mk = monthKey(today()), TB = taxBreakdown();
+  const line = (a, b, sub) => `<div class="item"><div class="grow"><p class="t15">${a}</p>${sub ? `<p class="small muted">${sub}</p>` : ''}</div><p class="t15" style="white-space:nowrap">${b}</p></div>`;
+  const fx = fixasPendentes(mk);
+  const ms = movsMonth(mk);
+  const debs = S.debts.filter(d => d.tipo !== 'splitwise' && d.prestacao > 0 && d.saldo > 0.005 && !marked(d.id) && !ms.some(m => m.dividaId === d.id));
+  const gs = S.goals.filter(g => goalMonthly(g) - goalTransfersMonth(g.id, mk) > 0);
+  openSheet(`<div class="between"><h2>Como chego aos ${eur0(L.livre)}</h2><button class="iconbtn" data-close aria-label="Fechar">${ic('x')}</button></div>
+    <div class="card tight"><div class="list">
+      ${line('Saldo na conta', eur(L.saldo), `saldo inicial ${eur(S.settings.saldoInicial)} + entradas − saídas registadas`)}
+      ${line('− Impostos reservados', eur(L.impostos), `IVA ${eur(TB.iva)} · SS ${eur(TB.ss)} · IRS ${eur(TB.irs)}`)}
+      ${line('− Despesas fixas por pagar', eur(L.fixas), fx.map(f => esc(f.nome)).join(', ') || 'nenhuma')}
+      ${line('− Dívidas deste mês', eur(L.dividas), [...debs.map(d => `${esc(d.nome)} ${eur0(Math.min(d.prestacao, d.saldo))}`), L.dividas > 0 && S.settings.reforcoDivida ? `reforço ${eur0(S.settings.reforcoDivida)}` : ''].filter(Boolean).join(' · ') || 'nada por pagar')}
+      ${line('− Metas deste mês', eur(L.metas), gs.map(g => esc(g.nome)).join(', ') || 'nada por pôr')}
+      ${line('<b>= Livre para gastar</b>', `<b>${eur(L.livre)}</b>`)}
+    </div></div>
+    <p class="small muted" style="margin:0">Se alguma destas já estava paga antes de começares a usar a app, toca em “Pago” na lista “Por pagar este mês” e escolhe “Já estava pago antes”. Para não reservar o reforço ou a meta este mês, muda o valor em Dívidas ou Metas.</p>
+    <div class="grid2"><a href="#dividas" class="btn sm sec" style="display:flex;align-items:center;justify-content:center;text-decoration:none;width:100%">Dívidas</a><a href="#metas" class="btn sm sec" style="display:flex;align-items:center;justify-content:center;text-decoration:none;width:100%">Metas</a></div>`,
+    sh => sh.querySelectorAll('a').forEach(a => a.addEventListener('click', () => closeSheet(true))));
+}
 function payDebt(d, valor, data = iso(today())){
   S.movs.push({ id:uid(), data, tipo:'divida', valor:r2(valor), dividaId:d.id, desc:d.nome });
   d.saldo = r2(d.saldo - valor);
@@ -891,9 +935,9 @@ function movSheet(id){
     <p class="num big" style="margin:0">${m.tipo==='receita'?'+':'−'} ${eur(m.valor)}</p>
     <p class="muted" style="margin:0">${shortDate(m.data)} · ${esc({despesa:'Despesa',receita:'Receita',transferencia:'Transferência para meta',divida:'Pagamento de dívida'}[m.tipo])}${m.cat ? ' · ' + esc(m.cat) : ''}</p>
     ${extra}
-    ${m.tipo==='despesa' ? `<label class="field"><span>Categoria</span><select class="input" id="mvCat">${S.categories.map(c => `<option ${c.nome===m.cat?'selected':''}>${esc(c.nome)}</option>`).join('')}</select></label>` : ''}
+    <button class="btn" id="mvEdit">Editar</button>
     <button class="btn danger" id="mvDel">${ic('trash',18)} Apagar registo</button>`, sh => {
-      const sel = $('#mvCat', sh); if (sel) sel.onchange = () => { m.cat = sel.value; save(); toast('Categoria alterada'); };
+      $('#mvEdit', sh).onclick = () => editMov(m);
       $('#mvDel', sh).onclick = async () => {
         if (!await ask('Apagar este registo?', { ok:'Apagar', danger:true })) return;
         if (m.tipo === 'divida'){ const d = S.debts.find(x => x.id === m.dividaId); if (d) d.saldo = r2(d.saldo + m.valor); }
@@ -901,6 +945,60 @@ function movSheet(id){
         S.movs = S.movs.filter(x => x.id !== m.id); save(); closeSheet(); render();
       };
     }, () => render());
+}
+
+function editMov(m){
+  const date = { k:'data', label:'Data', type:'date', value:m.data };
+  if (m.tipo === 'despesa'){
+    formSheet('Editar despesa', [
+      { k:'desc', label:'Descrição', value:m.desc || '' },
+      { k:'valor', label:'Valor', type:'num', value:m.valor },
+      { k:'cat', label:'Categoria', type:'select', options:S.categories.map(c => c.nome), value:m.cat }, date
+    ], out => {
+      if (!(out.valor > 0)){ toast('Indica um valor'); return false; }
+      let cat = out.cat; const nd = out.desc.trim();
+      if (nd && nd !== m.desc && cat === m.cat){ const g = guessCategory(nd); if (g !== 'Outros') cat = g; }   // mudaste o nome e não a categoria: sugere a certa
+      Object.assign(m, { desc:nd || cat, valor:r2(out.valor), cat, data:out.data || m.data });
+      learnCategory(m.desc, m.cat); toast('Despesa alterada');
+    });
+  } else if (m.tipo === 'receita' && m.cat !== 'Outras entradas'){
+    formSheet('Editar recibo', [
+      { k:'desc', label:'Descrição', value:m.desc || '' },
+      { k:'base', label:'Valor do serviço (sem IVA)', type:'num', value:m.base },
+      { k:'iva', label:'IVA', type:'select', options:[['1', `Com IVA ${Math.round(S.rules.ivaTaxa*100)}%`], ['0', 'Sem IVA / isento']], value:m.comIva ? '1' : '0' }, date
+    ], out => {
+      if (!(out.base > 0)){ toast('Indica um valor'); return false; }
+      const r = S.rules, com = out.iva === '1', base = r2(out.base), iva = com ? r2(base * r.ivaTaxa) : 0;
+      Object.assign(m, { desc:out.desc.trim() || 'Recibo', base, iva, comIva:com, valor:r2(base + iva), data:out.data || m.data,
+        reservas:{ iva, ss:r2(base * r.ssCoeficiente * r.ssTaxa), irs:r2(base * (S.settings.irsPct || 0) / 100) } });
+      toast('Recibo alterado');
+    });
+  } else if (m.tipo === 'receita'){
+    formSheet('Editar entrada', [{ k:'desc', label:'Descrição', value:m.desc || '' }, { k:'valor', label:'Valor', type:'num', value:m.valor }, date], out => {
+      if (!(out.valor > 0)){ toast('Indica um valor'); return false; }
+      Object.assign(m, { desc:out.desc.trim() || 'Entrada', valor:r2(out.valor), base:r2(out.valor), data:out.data || m.data });
+    });
+  } else {
+    const isD = m.tipo === 'divida';
+    formSheet(isD ? 'Editar pagamento de dívida' : 'Editar transferência', [{ k:'valor', label:'Valor', type:'num', value:m.valor }, date], out => {
+      if (!(out.valor > 0)){ toast('Indica um valor'); return false; }
+      const diff = r2(out.valor - m.valor);
+      if (isD){ const d = S.debts.find(x => x.id === m.dividaId); if (d) d.saldo = r2(d.saldo - diff); }
+      else { const g = S.goals.find(x => x.id === m.metaId); if (g) g.saldo = r2(g.saldo + diff); }
+      Object.assign(m, { valor:r2(out.valor), data:out.data || m.data });
+    });
+  }
+}
+/* aprende: a mesma descrição passa a ir para a categoria que escolheste */
+function learnCategory(desc, cat){
+  const k = ruleKey(desc); if (!k) return;
+  S.importRules = S.importRules || {}; S.marcas = S.marcas || {};
+  // 1.4.1: categoria própria para entregas (sai de Comer fora)
+  if (!S.categories.some(c => c.nome === 'Entregas (Uber Eats, Glovo)')){
+    const i = S.categories.findIndex(c => c.nome === 'Comer fora');
+    S.categories.splice(i >= 0 ? i + 1 : S.categories.length, 0, JSON.parse(JSON.stringify(DEFAULT_CATEGORIES.find(c => c.nome === 'Entregas (Uber Eats, Glovo)'))));
+    const cf = S.categories.find(c => c.nome === 'Comer fora'); if (cf) cf.kw = cf.kw.filter(k => !['uber eats','glovo','bolt food','take'].includes(k));
+  } S.importRules[k] = { kind:'despesa', cat };
 }
 
 /* ---------- Sheet / formulários ---------- */
@@ -1371,7 +1469,7 @@ function vMes(){
     <p class="small" style="margin:10px 0 0;${excedente>=0?'color:var(--teal)':'color:var(--amber)'};font-weight:600">${excedente >= 0 ? `+${eur0(excedente)} acima do mês base → podes passar para a Reserva de rendimento` : `Faltam ${eur0(-excedente)} para o mês base → podes tirar da Reserva de rendimento`}</p></section>` : ''}
   ${insight}
   <section class="card" style="display:flex;flex-direction:column;gap:13px" aria-label="Por categoria">
-    <div class="between"><h2>Por categoria</h2><button class="btn sm sec" id="editOrc">Orçamentos</button></div>
+    <div class="between"><h2>Por categoria</h2><div class="row" style="gap:6px"><button class="btn sm sec" id="addCat">+ Categoria</button><button class="btn sm sec" id="editOrc">Orçamentos</button></div></div>
     ${byCat.length ? byCat.map(c => `<div style="display:flex;flex-direction:column;gap:6px"><div class="between" style="font-size:14px"><span style="font-weight:600">${esc(c.nome)}</span><span class="muted"><b style="color:var(--ink)">${eur0(c.v)}</b>${c.orc ? ` de ${eur0(c.orc)}` : ''}</span></div>${bar(c.orc ? c.v / c.orc * 100 : (c.v ? 100 : 0), c.orc && c.v > c.orc ? '#B45309' : '')}</div>`).join('') : '<p class="empty">Sem gastos neste mês.</p>'}
   </section>
   <section class="card"><div class="between"><div><p class="t15" style="margin:0">${subs.length} subscriç${subs.length===1?'ão':'ões'}</p><p class="small muted" style="margin:2px 0 0">despesas fixas da categoria Subscrições</p></div>
@@ -1385,6 +1483,16 @@ AFTER.mes = () => {
   $('#mNext').onclick = () => { if (mesOffset < 0){ mesOffset++; render(); } };
   $('#addFixa').onclick = () => fixaForm();
   document.querySelectorAll('[data-fixa]').forEach(b => b.onclick = () => fixaForm(S.fixas.find(f => f.id === b.dataset.fixa)));
+  $('#addCat').onclick = () => formSheet('Nova categoria', [
+    { k:'nome', label:'Nome', placeholder:'ex.: Ginásio' },
+    { k:'orc', label:'Orçamento por mês', type:'num', value:0 },
+    { k:'kw', label:'Palavras que a identificam (separadas por vírgulas)', placeholder:'ex.: ginasio, fitness hut' }
+  ], out => {
+    const nome = out.nome.trim(); if (!nome){ toast('Indica o nome'); return false; }
+    if (S.categories.some(c => norm(c.nome) === norm(nome))){ toast('Já existe uma categoria com esse nome'); return false; }
+    S.categories.splice(Math.max(0, S.categories.length - 1), 0, { nome, orc:r2(out.orc), kw: out.kw.split(',').map(x => x.trim()).filter(Boolean) });
+    toast(`Categoria “${nome}” criada`);
+  });
   $('#editOrc').onclick = () => formSheet('Orçamento mensal por categoria', S.categories.map((c, i) => ({ k:'c'+i, label:c.nome, type:'num', value:c.orc })), out => { S.categories.forEach((c, i) => c.orc = r2(out['c'+i])); });
 };
 function fixaForm(f){
@@ -1613,6 +1721,9 @@ function vDefinicoes(){
     <button class="btn sec" id="bkExp">Exportar cópia (.json)</button>
     <label class="btn sec" style="display:flex;align-items:center;justify-content:center;cursor:pointer">Restaurar cópia<input type="file" id="bkImp" accept=".json,application/json" class="sr"></label>
     <button class="btn sec" id="csvExp">Exportar movimentos para Excel (.csv)</button></section>
+  <section class="card" style="display:flex;flex-direction:column;gap:10px"><p class="t15" style="margin:0">Ajuda</p>
+    <p class="small muted" style="margin:0">Algum número não bate certo? Cria um diagnóstico e envia-o ao Claude.</p>
+    <button class="btn sec" id="diag">Diagnóstico para o Claude</button></section>
   <section class="card" style="display:flex;flex-direction:column;gap:10px"><p class="t15" style="margin:0">Segurança</p>
     <button class="btn sec" id="lockNow">Bloquear agora</button>
     <button class="btn sec" id="chPass">Alterar palavra-passe</button>
@@ -1654,6 +1765,7 @@ AFTER.definicoes = () => {
     download(`movimentos-${iso(today())}.csv`, '﻿' + rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';')).join('\r\n'), 'text/csv');
   };
   $('#lockNow').onclick = lock;
+  $('#diag').onclick = diagnosticSheet;
   $('#chPass').onclick = () => {
     openSheet(`<div class="between"><h2>Alterar palavra-passe</h2><button class="iconbtn" data-close aria-label="Fechar">${ic('x')}</button></div>
       <label class="field"><span>Palavra-passe atual</span><input class="input" type="password" id="p0" autocomplete="current-password"></label>
@@ -1683,6 +1795,47 @@ AFTER.definicoes = () => {
     await wipeVault(); S = null; KEY = null; DEK_RAW = null; VAULT = null; location.hash = ''; render();
   };
 };
+/* Diagnóstico para o Claude: ficheiro legível (não encriptado) que o João decide enviar */
+function buildDiagnostic(anon, meses){
+  const t = today(); const desde = meses ? iso(new Date(t.getFullYear(), t.getMonth() - meses + 1, 1)) : '0000-00-00';
+  const clone = x => JSON.parse(JSON.stringify(x));
+  const movs = clone(S.movs.filter(m => m.data >= desde)).map(m => {
+    if (anon){ m.desc = m.tipo === 'despesa' ? (m.fixaId ? (S.fixas.find(f => f.id === m.fixaId)?.nome || m.cat) : m.cat) : m.tipo === 'receita' ? (m.cat === 'Outras entradas' ? 'Entrada' : 'Recibo') : m.desc; delete m.importKey; }
+    return m;
+  });
+  const mk = monthKey(t), L = livre();
+  return {
+    app:'pura-vida-diagnostico', versao:APP_VERSION, gerado:new Date().toISOString(), hoje:iso(t), anonimizado:!!anon, meses: meses || 'todos',
+    resumo:{ livre:L, porque:{
+      impostos:taxBreakdown(),
+      fixasPorPagar:fixasPendentes(mk).map(f => ({ nome:f.nome, valor:f.valor })),
+      dividasDoMes:debtPlanPending(mk), reforco:S.settings.reforcoDivida, fase:fase(), fimDividas:payoffMonth(),
+      metasDoMes:S.goals.map(g => ({ nome:g.nome, mensal:goalMonthly(g), jaPosto:goalTransfersMonth(g.id, mk) })).filter(g => g.mensal),
+      simulacaoDividas:simulateDebts(), faltaReserva:shortfall(L)
+    }, mesAtual:{ gasto:monthSpend(mk), recebido:monthIncome(mk) }, totalMovimentos:S.movs.length },
+    dados:{ v:S.v, criado:S.criado, onboarded:S.onboarded, settings:{ ...clone(S.settings), regrasUrl: S.settings.regrasUrl ? '(definido)' : '' },
+      rules:clone(S.rules), categories:clone(S.categories), fixas:clone(S.fixas), debts:clone(S.debts), goals:clone(S.goals), marcas:clone(S.marcas || {}),
+      importRules: anon ? {} : clone(S.importRules || {}), movs }
+  };
+}
+function diagnosticSheet(){
+  openSheet(`<div class="between"><h2>Diagnóstico para o Claude</h2><button class="iconbtn" data-close aria-label="Fechar">${ic('x')}</button></div>
+    <p class="small muted" style="margin:0">Cria um ficheiro com os cálculos e os teus registos para anexares na conversa com o Claude. Ele abre-o numa cópia da app e vê exatamente o que tu vês. <b>Este ficheiro não está encriptado</b>: envia-o só ao Claude.</p>
+    <label class="field"><span>Período</span><select class="input" id="dgM"><option value="3">Últimos 3 meses</option><option value="6">Últimos 6 meses</option><option value="0">Tudo</option></select></label>
+    <label class="row" style="gap:10px;font-size:15px;cursor:pointer"><input type="checkbox" id="dgA" style="width:22px;height:22px;accent-color:var(--teal)"> Esconder as descrições (ficam só as categorias)</label>
+    <button class="btn" id="dgGo">Criar e partilhar</button>`, sh => {
+      $('#dgGo', sh).onclick = async () => {
+        const d = buildDiagnostic($('#dgA', sh).checked, +$('#dgM', sh).value);
+        const name = `pura-vida-diagnostico-${iso(today())}.json`, content = JSON.stringify(d, null, 1);
+        closeSheet(true);
+        try {
+          const file = new File([content], name, { type:'application/json' });
+          if (navigator.canShare && navigator.canShare({ files:[file] })){ await navigator.share({ files:[file], title:'Diagnóstico Pura Vida' }); toast('Anexa o ficheiro na conversa com o Claude'); return; }
+        } catch(e){ if (e && e.name === 'AbortError') return; }
+        download(name, content, 'application/json'); toast('Ficheiro criado. Anexa-o na conversa com o Claude.');
+      };
+    });
+}
 /* Cópia de segurança: no iPhone abre a folha de partilha → "Guardar em Ficheiros" → iCloud Drive */
 async function exportBackup(){
   if (!VAULT) return;
