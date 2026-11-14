@@ -112,7 +112,7 @@ nav.tabs a.plus{width:58px;height:58px;margin-top:-24px;border-radius:29px;backg
    Tudo corre no telemóvel. Dados encriptados (AES-GCM) com
    chave derivada da palavra-passe (PBKDF2). Sem servidores.
    ========================================================= */
-const APP_VERSION = '1.4.1';
+const APP_VERSION = '1.4.2';
 const STORE_KEY = 'vt_vault_v1';
 const LOCK_AFTER_MS = 2 * 60 * 1000;
 
@@ -156,6 +156,7 @@ const DEFAULT_CATEGORIES = [
   { nome:'Lazer', orc:60, kw:['cinema','climbup','escalada','surf','concerto','livro','jogo','ginasio','ginásio'] },
   { nome:'Saúde', orc:40, kw:['farmacia','farmácia','medico','médico','dentista','analises','análises','consulta','fisio','cuf','luz saude','lusiadas','wells'] },
   { nome:'Bem-estar', orc:30, kw:['cabeleireiro','barbeiro','massagem','spa'] },
+  { nome:'Roupa e calçado', orc:40, kw:['zara','decathlon','sapatilhas','sapatos','primark','sport zone','h&m','bershka','pull and bear','nike','adidas','mango','lefties','foot locker','jd sports'] },
   { nome:'Manel', orc:300, kw:['manel','escola','creche','brinquedo','fraldas'] },
   { nome:'Atividade profissional', orc:50, kw:['material','seguro acidentes','contabilista','formação','formacao','equipamento'] },
   { nome:'Impostos', orc:0, kw:['iva','seguranca social','segurança social','irs','finanças','financas','coima'] },
@@ -315,7 +316,7 @@ function freshState(){
   return {
     v: 1,
     criado: iso(today()),
-    settings: { saldoInicial: 0, mesBase: 0, reforcoDivida: 0, valorFuturo: 0, irsPct: 15, estrategia: 'estado_juro', investimentosValor: 0, regrasUrl: '', ultimaCopia: '', ocultarInstalar: false },
+    settings: { retencaoPadrao: 0, saldoInicial: 0, mesBase: 0, reforcoDivida: 0, valorFuturo: 0, irsPct: 15, estrategia: 'estado_juro', investimentosValor: 0, regrasUrl: '', ultimaCopia: '', ocultarInstalar: false },
     rules: JSON.parse(JSON.stringify(DEFAULT_RULES)),
     categories: JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
     fixas: [],     // { id, nome, valor, dia, cat, detalhe }
@@ -370,15 +371,25 @@ function demoState(){
   return s;
 }
 
-function addReceita(s, { data, desc, base, comIva, cat }){
-  const r = s.rules;
+/* Recibo verde: valor do serviço + IVA − IRS retido pelo cliente = o que entra na conta.
+   Reserva de IRS só na parte acima do que o cliente já reteve. */
+function receitaCalc(s, base, comIva, retPct){
+  const r = s.rules; base = r2(base); retPct = +retPct || 0;
   const iva = comIva ? r2(base * r.ivaTaxa) : 0;
+  const ret = r2(base * retPct / 100);
   const ss = r2(base * r.ssCoeficiente * r.ssTaxa);
-  const irs = r2(base * (s.settings.irsPct || 0) / 100);
-  const mov = { id:uid(), data, tipo:'receita', valor:r2(base + iva), base:r2(base), iva, comIva:!!comIva, cat: cat || 'Recibos verdes', desc, reservas:{ iva, ss, irs } };
+  const irs = r2(base * Math.max(0, (s.settings.irsPct || 0) - retPct) / 100);
+  return { base, iva, ret, retPct, valor: r2(base + iva - ret), reservas:{ iva, ss, irs } };
+}
+function addReceita(s, { data, desc, base, comIva, cat, retPct }){
+  if (retPct === undefined) retPct = s.settings.retencaoPadrao || 0;
+  const c = receitaCalc(s, base, comIva, retPct);
+  const mov = { id:uid(), data, tipo:'receita', valor:c.valor, base:c.base, iva:c.iva, retencao:c.ret, retPct:c.retPct, comIva:!!comIva, cat: cat || 'Recibos verdes', desc, reservas:c.reservas };
   s.movs.push(mov);
   return mov;
 }
+/* a partir do valor que entrou na conta, descobre o valor do serviço */
+const baseFromReceived = (s, recebido, comIva, retPct) => r2(recebido / (1 + (comIva ? s.rules.ivaTaxa : 0) - (+retPct || 0) / 100));
 
 async function saveNow(){
   if (!KEY || !S) return;
@@ -390,11 +401,14 @@ function save(){ clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 150); 
 
 /* ---------- Cálculos ---------- */
 const sum = (arr, f) => arr.reduce((a, x) => a + (f ? f(x) : x), 0);
-const movsMonth = mk => S.movs.filter(m => m.data.slice(0,7) === mk);
+const mesDe = m => m.mesRef || m.data.slice(0,7);          // "conta para o mês"
+const movsMonth = mk => S.movs.filter(m => mesDe(m) === mk);
+const proprio = m => r2(m.valor - (m.partilha?.valor || 0)); // a minha parte (o resto fica no Splitwise)
+const vivos = () => S.movs.filter(m => !m.historico);         // histórico: só estatísticas
 
 function saldoConta(){
   let s = S.settings.saldoInicial || 0;
-  for (const m of S.movs){
+  for (const m of vivos()){
     if (m.tipo === 'receita') s += m.valor;
     else s -= m.valor;
   }
@@ -404,18 +418,38 @@ function taxReserve(){
   // o que está reservado para impostos = IVA + SS + IRS ainda por pagar (cada um nunca abaixo de zero)
   const t = taxBreakdown(); return r2(t.iva + t.ss + t.irs);
 }
-function taxBreakdown(){
-  const rec = S.movs.filter(m => m.tipo === 'receita');
-  const pagos = S.movs.filter(m => m.tipo === 'despesa' && m.cat === 'Impostos');
-  const tag = k => sum(pagos.filter(p => p.impTipo === k), p => p.valor);
-  const iva = sum(rec, m => m.reservas?.iva||0) - tag('iva');
-  const ss = sum(rec, m => m.reservas?.ss||0) - tag('ss');
-  const irs = sum(rec, m => m.reservas?.irs||0) - tag('irs'); // coimas e outros (sem tipo) não mexem nas reservas
-  return { iva:r2(Math.max(0,iva)), ss:r2(Math.max(0,ss)), irs:r2(Math.max(0,irs)) };
+/* Impostos por trimestre: um pagamento só abate às reservas do trimestre a que diz respeito.
+   IVA: pago no trimestre seguinte. SS: contribuições de nov/dez/jan → 3.º trim.; fev/mar/abr → 4.º; mai/jun/jul → 1.º; ago/set/out → 2.º. */
+const qKey = d => `${d.slice(0,4)}-Q${Math.floor((+d.slice(5,7) - 1) / 3) + 1}`;
+function refQuarter(d, tipo){
+  const y = +d.slice(0,4), m = +d.slice(5,7);
+  if (tipo === 'iva'){ const q = Math.floor((m - 1) / 3) + 1; return q === 1 ? `${y-1}-Q4` : `${y}-Q${q-1}`; }
+  if (tipo === 'ss'){ if (m >= 11) return `${y}-Q3`; if (m === 1) return `${y-1}-Q3`; if (m <= 4) return `${y-1}-Q4`; if (m <= 7) return `${y}-Q1`; return `${y}-Q2`; }
+  return 'ano';
 }
+const qLabel = q => q === 'ano' ? 'do ano' : `do ${q.slice(-1)}.º trimestre de ${q.slice(0,4)}`;
+function taxBuckets(){
+  const B = { iva:{}, ss:{}, irs:{} }, P = { iva:{}, ss:{}, irs:{} };
+  const add = (o, t, q, v) => { o[t][q] = (o[t][q] || 0) + v; };
+  for (const m of vivos()){
+    if (m.tipo === 'receita' && m.reservas){ add(B, 'iva', qKey(m.data), m.reservas.iva || 0); add(B, 'ss', qKey(m.data), m.reservas.ss || 0); add(B, 'irs', 'ano', m.reservas.irs || 0); }
+    if (m.tipo === 'despesa' && m.cat === 'Impostos' && ['iva','ss','irs'].includes(m.impTipo)) add(P, m.impTipo, m.impRef || refQuarter(m.data, m.impTipo), m.valor);
+  }
+  for (const a of (S.reservasAntigas || [])) add(B, a.tipo, a.q, a.valor);
+  return { B, P };
+}
+function taxBreakdown(){
+  const { B, P } = taxBuckets(); const out = {};
+  for (const t of ['iva','ss','irs']){
+    const qs = new Set([...Object.keys(B[t])]);
+    out[t] = r2(sum([...qs], q => Math.max(0, (B[t][q] || 0) - (P[t][q] || 0))));
+  }
+  return out;
+}
+function reserveFor(tipo, q){ const { B, P } = taxBuckets(); return r2(Math.max(0, (B[tipo][q] || 0) - (P[tipo][q] || 0))); }
 const marked = (id, mk = monthKey(today())) => ((S.marcas || {})[mk] || []).includes(id);
 function markPaid(id, mk = monthKey(today())){ S.marcas = S.marcas || {}; (S.marcas[mk] = S.marcas[mk] || []).includes(id) || S.marcas[mk].push(id); }
-function fixaPaidThisMonth(f, mk){ return marked(f.id, mk) || S.movs.some(m => m.fixaId === f.id && m.data.slice(0,7) === mk); }
+function fixaPaidThisMonth(f, mk){ return marked(f.id, mk) || S.movs.some(m => m.fixaId === f.id && mesDe(m) === mk); }
 function fixasPendentes(mk = monthKey(today())){ return S.fixas.filter(f => !fixaPaidThisMonth(f, mk)); }
 function activeDebts(){ return S.debts.filter(d => d.saldo > 0.005 && d.tipo !== 'splitwise'); }
 function fase(){ return activeDebts().length ? 1 : 2; }
@@ -440,11 +474,20 @@ function payoffMonth(){
   return ks.length ? ks[ks.length-1] : null;
 }
 function goalTransfersMonth(goalId, mk){ return sum(movsMonth(mk).filter(m => m.tipo === 'transferencia' && m.metaId === goalId), m => m.valor); }
+// Fase 2 por etapas: primeiro enche o fundo de emergência (se estiver em "depois das dívidas"), depois as metas por %.
+function emergEtapa(){
+  const e = S.goals.find(g => g.fase === 2 && g.tipo === 'emergencia'); if (!e || !(e.alvo > 0)) return null;
+  const inicioMes = r2((e.saldo || 0) - goalTransfersMonth(e.id, monthKey(today())));
+  return inicioMes < e.alvo - 0.005 ? { g:e, falta: r2(e.alvo - inicioMes) } : null;
+}
 function goalMonthly(g){
   if (g.fase === 2){
     if (fase() !== 2) return 0;
     const pm = payoffMonth(); if (pm && monthKey(today()) <= pm) return 0;
-    return r2((S.settings.valorFuturo || 0) * (g.pct || 0) / 100);
+    const fut = S.settings.valorFuturo || 0; const et = emergEtapa();
+    if (g.tipo === 'emergencia') return et ? r2(Math.min(fut, et.falta)) : 0;
+    if (et) return 0;
+    return r2(fut * (g.pct || 0) / 100);
   }
   return g.mensal || 0;
 }
@@ -498,7 +541,7 @@ function shortfallCard(sf){
   const link = sf.tipo === 'dividas' ? '#dividas' : sf.tipo === 'metas' ? '#metas' : '#mes';
   return `<a href="${link}" class="note blue" style="display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:16px;text-decoration:none"><b style="font-size:15px">${txt[0].replace('{v}', eur0(sf.valor))}</b><span>${txt[1]}</span></a>`;
 }
-function monthSpend(mk){ return r2(sum(movsMonth(mk).filter(m => m.tipo === 'despesa' && m.cat !== 'Impostos'), m => m.valor)); }
+function monthSpend(mk){ return r2(sum(movsMonth(mk).filter(m => m.tipo === 'despesa' && m.cat !== 'Impostos'), proprio)); }
 
 function quarterOf(d){ return Math.floor(d.getMonth() / 3) + 1; }
 function quarterRange(y, q){ return [new Date(y, (q-1)*3, 1), new Date(y, q*3, 0)]; }
@@ -598,8 +641,14 @@ function guessCategory(text){
   return prev ? prev.cat : 'Outros';
 }
 function parseQuick(text){
-  const raw = String(text || '').trim();
+  let raw = String(text || '').trim();
   if (!raw) return null;
+  let retPct, share = 0;
+  const rm = norm(raw).match(/reten[c]?[a]?o\s*(?:de\s*)?(\d{1,2})\s*%?/);
+  if (rm){ retPct = +rm[1]; raw = raw.replace(/reten[çc][ãa]o\s*(de\s*)?\d{1,2}\s*%?/i, ' '); }
+  if (/sem\s+reten/i.test(norm(raw))){ retPct = 0; raw = raw.replace(/sem\s+reten[çc][ãa]o/i, ' '); }
+  const sm = norm(raw).match(/\b(a meias|dividid[oa]|partilhad[oa]|com a diana|splitwise)\b/);
+  if (sm){ share = 50; raw = raw.replace(/\b(a meias|dividid[oa]|partilhad[oa]|com a diana|no splitwise)\b/i, ' ').trim(); }
   const t = norm(raw);
   const numMatch = raw.match(/(\d+(?:[.\s]\d{3})*(?:[.,]\d{1,2})?)\s*(?:€|eur|euros)?/gi);
   let valor = NaN;
@@ -610,10 +659,10 @@ function parseQuick(text){
     const comIva = /\bcom\s+iva\b/.test(t) || (!/\bsem\s+iva\b/.test(t) && /^recibo/.test(t));
     desc = desc.replace(/^(recebi|receita)\s*/i,'').replace(/^(da|do|de|dos|das)\s+/i,'');
     desc = desc ? desc.charAt(0).toUpperCase() + desc.slice(1) : 'Recibo';
-    return { tipo:'receita', valor, desc, comIva };
+    return { tipo:'receita', valor, desc, comIva, retPct };
   }
   desc = desc ? desc.charAt(0).toUpperCase() + desc.slice(1) : '';
-  return { tipo:'despesa', valor, desc, cat: guessCategory(raw) };
+  return { tipo:'despesa', valor, desc, cat: guessCategory(raw), share };
 }
 
 /* ---------- Frases (escritas ou ditadas): perceber qualquer tipo de registo ---------- */
@@ -673,7 +722,7 @@ function parseCommand(text){
   const valor = lastAmount(raw);
   // receita
   const p = parseQuick(raw);
-  if (p && p.tipo === 'receita') return { kind:'receita', valor, desc:p.desc, comIva:p.comIva };
+  if (p && p.tipo === 'receita') return { kind:'receita', valor, desc:p.desc, comIva:p.comIva, retPct: p.retPct ?? (S.settings.retencaoPadrao || 0) };
   // impostos do próprio (não dívidas): "paguei IVA 412", "paguei IRS 300"
   const debt = matchDebt(t);
   const taxWord = has(t, 'iva') ? 'iva' : has(t, 'irs') ? 'irs' : (has(t, 'seguranca social', 'ss') ? 'ss' : null);
@@ -694,7 +743,7 @@ function parseCommand(text){
   const fixa = matchFixa(t);
   if (fixa && (has(t, ...PAY) || isNaN(valor))) return { kind:'fixa', fixaId:fixa.id, valor: isNaN(valor) ? fixa.valor : valor };
   // despesa normal
-  if (p && p.tipo === 'despesa') return { kind:'despesa', valor, desc:p.desc || p.cat, cat:p.cat };
+  if (p && p.tipo === 'despesa') return { kind:'despesa', valor, desc:p.desc || p.cat, cat:p.cat, share:p.share || 0 };
   return null;
 }
 function describeAction(a){
@@ -703,13 +752,13 @@ function describeAction(a){
   if (bad) return { ok:false, html:`<span>Falta o valor. Ex.: “gasolina 45”.</span>` };
   const L = (tag, main, sub) => ({ ok:true, html:`<span class="pill teal" style="align-self:flex-start">${tag}</span><b style="font-size:15px">${main}</b>${sub ? `<span class="small">${sub}</span>` : ''}` });
   switch (a.kind){
-    case 'despesa': return L('Despesa', `${esc(a.desc)} · ${eur(a.valor)}`, esc(a.cat));
-    case 'receita': { const r = S.rules, iva = a.comIva ? r2(a.valor*r.ivaTaxa) : 0, ss = r2(a.valor*r.ssCoeficiente*r.ssTaxa), irs = r2(a.valor*(S.settings.irsPct||0)/100);
-      return L('Receita', `${esc(a.desc)} · ${eur(a.valor)}${a.comIva ? ` + IVA ${eur(iva)}` : ''}`, `Reserva SS ${eur(ss)} e IRS ${eur(irs)} · fica para ti ${eur(a.valor - ss - irs)}`); }
+    case 'despesa': return L('Despesa', `${esc(a.desc)} · ${eur(a.valor)}`, esc(a.cat) + (a.share ? ` · dividido com a Diana: a tua parte ${eur(a.valor * (1 - a.share/100))}, ${eur(a.valor * a.share/100)} abatem no Splitwise` : ''));
+    case 'receita': { const c = receitaCalc(S, a.valor, a.comIva, a.retPct);
+      return L('Recibo', `${esc(a.desc)} · serviço ${eur(c.base)}`, `${a.comIva ? `+ IVA ${eur(c.iva)} ` : ''}${c.ret ? `− IRS retido ${eur(c.ret)} (${c.retPct}%) ` : ''}= entra na conta ${eur(c.valor)} · reservas: IVA ${eur(c.reservas.iva)}, SS ${eur(c.reservas.ss)}${c.reservas.irs ? `, IRS ${eur(c.reservas.irs)}` : ''}`); }
     case 'divida': { const d = S.debts.find(x => x.id === a.debtId); const v = Math.min(a.valor, d.saldo);
       return L(d.tipo === 'splitwise' ? 'Acerto Splitwise' : a.extra ? 'Reforço de dívida' : 'Pagamento de dívida', `${esc(d.nome)} · ${eur(v)}`, `Falta depois: ${eur(d.saldo - v)}${a.valor > d.saldo ? ' (valor limitado ao que falta)' : ''}`); }
-    case 'imposto': { const TB = taxBreakdown(); const res = TB[a.impTipo] ?? 0;
-      return L('Imposto', `${esc(a.desc)} · ${eur(a.valor)}`, `A reserva para ${a.impTipo === 'ss' ? 'Segurança Social' : a.impTipo.toUpperCase()} desce de ${eur(res)} para ${eur(Math.max(0, res - a.valor))}`); }
+    case 'imposto': { const q = refQuarter(iso(today()), a.impTipo); const res = reserveFor(a.impTipo, q); const nm = a.impTipo === 'ss' ? 'Segurança Social' : a.impTipo.toUpperCase();
+      return L('Imposto', `${esc(a.desc)} · ${eur(a.valor)}`, res > 0 ? `Abate à reserva de ${nm} ${qLabel(q)}: ${eur(res)} → ${eur(Math.max(0, res - a.valor))}` : `Diz respeito ${qLabel(q)}, que não tem reserva na app (de antes de começares): não mexe nas reservas atuais`); }
     case 'transferencia': { const g = S.goals.find(x => x.id === a.goalId);
       return L('Para meta', `${esc(g.nome)} · ${eur(a.valor)}`, `Fica com ${eur((g.saldo||0) + a.valor)} · não conta como gasto`); }
     case 'fixa': { const f = S.fixas.find(x => x.id === a.fixaId); const done = fixaPaidThisMonth(f, monthKey(today()));
@@ -721,8 +770,8 @@ function describeAction(a){
 function runAction(a){
   const data = iso(today());
   switch (a.kind){
-    case 'despesa': S.movs.push({ id:uid(), data, tipo:'despesa', valor:r2(a.valor), cat:a.cat, desc:a.desc }); return `Registado: ${a.desc} ${eur(a.valor)}`;
-    case 'receita': addReceita(S, { data, desc:a.desc, base:a.valor, comIva:a.comIva }); return 'Receita registada e reservas feitas';
+    case 'despesa': { const m = { id:uid(), data, tipo:'despesa', valor:r2(a.valor), cat:a.cat, desc:a.desc }; S.movs.push(m); if (a.share) applyShare(m, a.share); return `Registado: ${a.desc} ${eur(a.valor)}${a.share ? ' (dividido)' : ''}`; }
+    case 'receita': addReceita(S, { data, desc:a.desc, base:a.valor, comIva:a.comIva, retPct:a.retPct }); return 'Recibo registado e reservas feitas';
     case 'divida': { const d = S.debts.find(x => x.id === a.debtId); payDebt(d, Math.min(a.valor, d.saldo), data); return d.saldo <= 0.005 ? `${d.nome} está paga!` : `Falta ${eur(d.saldo)} em ${d.nome}`; }
     case 'imposto': S.movs.push({ id:uid(), data, tipo:'despesa', valor:r2(a.valor), cat:'Impostos', impTipo:a.impTipo, desc:a.desc }); return `${a.desc} registado`;
     case 'transferencia': { const g = S.goals.find(x => x.id === a.goalId); S.movs.push({ id:uid(), data, tipo:'transferencia', valor:r2(a.valor), metaId:g.id, desc:g.nome }); g.saldo = r2((g.saldo||0) + a.valor); return `${eur(a.valor)} para ${g.nome}`; }
@@ -827,12 +876,13 @@ function vHoje(){
   </main>`;
 }
 function movRow(m){
-  const sign = m.tipo === 'receita' ? '+ ' : '− ';
-  const color = m.tipo === 'receita' ? 'color:var(--teal)' : '';
-  const sub = m.tipo === 'receita' ? (m.comIva ? `IVA ${eur(m.iva)} e SS reservados` : 'SS reservada') :
-              m.tipo === 'transferencia' ? `para ${esc(S.goals.find(g => g.id === m.metaId)?.nome || 'meta')}` :
-              m.tipo === 'divida' ? 'pagamento de dívida' : esc(m.cat);
-  return `<button class="item" data-mov="${m.id}" style="width:100%;background:none;border-left:none;border-right:none;border-bottom:none;text-align:left;cursor:pointer;color:inherit"><div class="grow"><p class="t15">${esc(m.desc || m.cat || '—')}</p><p class="small muted">${sub} · ${shortDate(m.data)}</p></div><p class="num" style="font-size:15px;${color}">${sign}${eur(m.valor)}</p></button>`;
+  const entra = m.tipo === 'receita' || (m.tipo === 'transferencia' && m.valor < 0);
+  const sign = entra ? '+ ' : '− ';
+  const color = entra ? 'color:var(--teal)' : '';
+  const sub = (m.historico ? 'histórico · ' : '') + (m.mesRef ? `conta para ${MESES[+m.mesRef.slice(5,7) - 1]} · ` : '') + (m.partilha ? `dividido (Diana ${eur(m.partilha.valor)}) · ` : '') + (m.tipo === 'receita' ? (m.cat === 'Outras entradas' ? 'entrada' : (m.comIva ? `IVA ${eur(m.iva)} e SS reservados` : 'SS reservada') + (m.retencao ? ` · IRS retido ${eur(m.retencao)}` : '')) :
+              m.tipo === 'transferencia' ? `${m.valor < 0 ? 'tirado de' : 'para'} ${esc(S.goals.find(g => g.id === m.metaId)?.nome || 'meta')}` :
+              m.tipo === 'divida' ? 'pagamento de dívida' : esc(m.cat));
+  return `<button class="item" data-mov="${m.id}" style="width:100%;background:none;border-left:none;border-right:none;border-bottom:none;text-align:left;cursor:pointer;color:inherit"><div class="grow"><p class="t15">${esc(m.desc || m.cat || '—')}</p><p class="small muted">${sub} · ${shortDate(m.data)}</p></div><p class="num" style="font-size:15px;${color}">${sign}${eur(Math.abs(m.valor))}</p></button>`;
 }
 AFTER.hoje = () => {
   const inp = $('#quickIn'), prev = $('#quickPrev');
@@ -916,6 +966,11 @@ function livreSheet(){
     <div class="grid2"><a href="#dividas" class="btn sm sec" style="display:flex;align-items:center;justify-content:center;text-decoration:none;width:100%">Dívidas</a><a href="#metas" class="btn sm sec" style="display:flex;align-items:center;justify-content:center;text-decoration:none;width:100%">Metas</a></div>`,
     sh => sh.querySelectorAll('a').forEach(a => a.addEventListener('click', () => closeSheet(true))));
 }
+/* Dividir uma despesa com a Diana: a parte dela abate ao que deves no Splitwise */
+function splitwiseDebt(){ let d = S.debts.find(x => x.tipo === 'splitwise'); if (!d){ d = { id:uid(), nome:'Splitwise', tipo:'splitwise', saldo:0, prestacao:0, taeg:0, dia:0, nota:'Diana' }; S.debts.push(d); } return d; }
+function removeShare(m){ if (!m.partilha) return; const d = S.debts.find(x => x.id === m.partilha.debtId); if (d && !m.historico) d.saldo = r2(d.saldo + m.partilha.valor); delete m.partilha; }
+function applyShare(m, pct){ removeShare(m); pct = +pct || 0; if (!pct) return; const d = splitwiseDebt(); const v = r2(m.valor * pct / 100); m.partilha = { pct, valor:v, debtId:d.id }; if (!m.historico) d.saldo = r2(d.saldo - v); }
+const SHARE_OPTS = [['0','Não dividir'],['50','A meias (50%)'],['100','É tudo da Diana (100%)'],['33','A Diana paga 1/3'],['67','A Diana paga 2/3']];
 function payDebt(d, valor, data = iso(today())){
   S.movs.push({ id:uid(), data, tipo:'divida', valor:r2(valor), dividaId:d.id, desc:d.nome });
   d.saldo = r2(d.saldo - valor);
@@ -940,8 +995,9 @@ function movSheet(id){
       $('#mvEdit', sh).onclick = () => editMov(m);
       $('#mvDel', sh).onclick = async () => {
         if (!await ask('Apagar este registo?', { ok:'Apagar', danger:true })) return;
-        if (m.tipo === 'divida'){ const d = S.debts.find(x => x.id === m.dividaId); if (d) d.saldo = r2(d.saldo + m.valor); }
-        if (m.tipo === 'transferencia'){ const g = S.goals.find(x => x.id === m.metaId); if (g) g.saldo = r2(g.saldo - m.valor); }
+        if (m.tipo === 'divida' && !m.historico){ const d = S.debts.find(x => x.id === m.dividaId); if (d) d.saldo = r2(d.saldo + m.valor); }
+        if (m.tipo === 'transferencia' && !m.historico){ const g = S.goals.find(x => x.id === m.metaId); if (g) g.saldo = r2(g.saldo - m.valor); }
+        removeShare(m);
         S.movs = S.movs.filter(x => x.id !== m.id); save(); closeSheet(); render();
       };
     }, () => render());
@@ -949,56 +1005,60 @@ function movSheet(id){
 
 function editMov(m){
   const date = { k:'data', label:'Data', type:'date', value:m.data };
+  const mes = { k:'mesRef', label:'Conta para o mês (opcional)', type:'month', value:m.mesRef || '', hint:'Ex.: recibo de 27 out que é para viver em novembro. Vazio = o mês da data.' };
+  const setMes = out => { const v = (out.mesRef || '').slice(0,7); if (v && v !== (out.data || m.data).slice(0,7)) m.mesRef = v; else delete m.mesRef; };
   if (m.tipo === 'despesa'){
     formSheet('Editar despesa', [
       { k:'desc', label:'Descrição', value:m.desc || '' },
       { k:'valor', label:'Valor', type:'num', value:m.valor },
-      { k:'cat', label:'Categoria', type:'select', options:S.categories.map(c => c.nome), value:m.cat }, date
+      { k:'cat', label:'Categoria', type:'select', options:S.categories.map(c => c.nome), value:m.cat },
+      { k:'share', label:'Dividir com a Diana (Splitwise)', type:'select', options:SHARE_OPTS, value:String(m.partilha?.pct || 0) }, date, mes
     ], out => {
       if (!(out.valor > 0)){ toast('Indica um valor'); return false; }
       let cat = out.cat; const nd = out.desc.trim();
       if (nd && nd !== m.desc && cat === m.cat){ const g = guessCategory(nd); if (g !== 'Outros') cat = g; }   // mudaste o nome e não a categoria: sugere a certa
-      Object.assign(m, { desc:nd || cat, valor:r2(out.valor), cat, data:out.data || m.data });
+      removeShare(m);
+      Object.assign(m, { desc:nd || cat, valor:r2(out.valor), cat, data:out.data || m.data }); setMes(out);
+      applyShare(m, out.share);
       learnCategory(m.desc, m.cat); toast('Despesa alterada');
     });
   } else if (m.tipo === 'receita' && m.cat !== 'Outras entradas'){
     formSheet('Editar recibo', [
       { k:'desc', label:'Descrição', value:m.desc || '' },
       { k:'base', label:'Valor do serviço (sem IVA)', type:'num', value:m.base },
-      { k:'iva', label:'IVA', type:'select', options:[['1', `Com IVA ${Math.round(S.rules.ivaTaxa*100)}%`], ['0', 'Sem IVA / isento']], value:m.comIva ? '1' : '0' }, date
+      { k:'iva', label:'IVA', type:'select', options:[['1', `Com IVA ${Math.round(S.rules.ivaTaxa*100)}%`], ['0', 'Sem IVA / isento']], value:m.comIva ? '1' : '0' },
+      { k:'ret', label:'IRS retido pelo cliente', type:'select', options:RET_OPTS, value:String(m.retPct || 0) }, date, mes
     ], out => {
       if (!(out.base > 0)){ toast('Indica um valor'); return false; }
-      const r = S.rules, com = out.iva === '1', base = r2(out.base), iva = com ? r2(base * r.ivaTaxa) : 0;
-      Object.assign(m, { desc:out.desc.trim() || 'Recibo', base, iva, comIva:com, valor:r2(base + iva), data:out.data || m.data,
-        reservas:{ iva, ss:r2(base * r.ssCoeficiente * r.ssTaxa), irs:r2(base * (S.settings.irsPct || 0) / 100) } });
-      toast('Recibo alterado');
+      const c = receitaCalc(S, out.base, out.iva === '1', +out.ret);
+      Object.assign(m, { desc:out.desc.trim() || 'Recibo', base:c.base, iva:c.iva, retencao:c.ret, retPct:c.retPct, comIva:out.iva === '1', valor:c.valor, data:out.data || m.data, reservas:c.reservas }); setMes(out);
+      toast(`Recibo alterado: entra na conta ${eur(c.valor)}`);
     });
   } else if (m.tipo === 'receita'){
-    formSheet('Editar entrada', [{ k:'desc', label:'Descrição', value:m.desc || '' }, { k:'valor', label:'Valor', type:'num', value:m.valor }, date], out => {
+    formSheet('Editar entrada', [{ k:'desc', label:'Descrição', value:m.desc || '' }, { k:'valor', label:'Valor', type:'num', value:m.valor }, date, mes], out => {
       if (!(out.valor > 0)){ toast('Indica um valor'); return false; }
-      Object.assign(m, { desc:out.desc.trim() || 'Entrada', valor:r2(out.valor), base:r2(out.valor), data:out.data || m.data });
+      Object.assign(m, { desc:out.desc.trim() || 'Entrada', valor:r2(out.valor), base:r2(out.valor), data:out.data || m.data }); setMes(out);
     });
   } else {
     const isD = m.tipo === 'divida';
-    formSheet(isD ? 'Editar pagamento de dívida' : 'Editar transferência', [{ k:'valor', label:'Valor', type:'num', value:m.valor }, date], out => {
+    const neg = !isD && m.valor < 0;
+    formSheet(isD ? 'Editar pagamento de dívida' : neg ? 'Editar dinheiro tirado da meta' : 'Editar transferência', [{ k:'valor', label:'Valor', type:'num', value:Math.abs(m.valor) }, date, mes], out => {
       if (!(out.valor > 0)){ toast('Indica um valor'); return false; }
+      if (neg) out.valor = -out.valor;
       const diff = r2(out.valor - m.valor);
-      if (isD){ const d = S.debts.find(x => x.id === m.dividaId); if (d) d.saldo = r2(d.saldo - diff); }
-      else { const g = S.goals.find(x => x.id === m.metaId); if (g) g.saldo = r2(g.saldo + diff); }
-      Object.assign(m, { valor:r2(out.valor), data:out.data || m.data });
+      if (!m.historico){
+        if (isD){ const d = S.debts.find(x => x.id === m.dividaId); if (d) d.saldo = r2(d.saldo - diff); }
+        else { const g = S.goals.find(x => x.id === m.metaId); if (g) g.saldo = r2(g.saldo + diff); }
+      }
+      Object.assign(m, { valor:r2(out.valor), data:out.data || m.data }); setMes(out);
     });
   }
 }
+const RET_OPTS = [['0','Sem retenção'],['23','23%'],['25','25%'],['20','20%'],['16.5','16,5%'],['11.5','11,5%']];
 /* aprende: a mesma descrição passa a ir para a categoria que escolheste */
 function learnCategory(desc, cat){
   const k = ruleKey(desc); if (!k) return;
-  S.importRules = S.importRules || {}; S.marcas = S.marcas || {};
-  // 1.4.1: categoria própria para entregas (sai de Comer fora)
-  if (!S.categories.some(c => c.nome === 'Entregas (Uber Eats, Glovo)')){
-    const i = S.categories.findIndex(c => c.nome === 'Comer fora');
-    S.categories.splice(i >= 0 ? i + 1 : S.categories.length, 0, JSON.parse(JSON.stringify(DEFAULT_CATEGORIES.find(c => c.nome === 'Entregas (Uber Eats, Glovo)'))));
-    const cf = S.categories.find(c => c.nome === 'Comer fora'); if (cf) cf.kw = cf.kw.filter(k => !['uber eats','glovo','bolt food','take'].includes(k));
-  } S.importRules[k] = { kind:'despesa', cat };
+  S.importRules = S.importRules || {}; S.importRules[k] = { kind:'despesa', cat };
 }
 
 /* ---------- Sheet / formulários ---------- */
@@ -1090,12 +1150,14 @@ AFTER.registar = () => {
                          : `<label class="field"><span>IVA</span><select class="input" id="rIva"><option value="1">Com IVA ${Math.round(S.rules.ivaTaxa*100)}%</option><option value="0">Sem IVA / isento</option></select></label>`}
       </div>
       <label class="field"><span>Descrição</span><input class="input" id="rDesc" placeholder="${t==='receita'?'ex.: Recibo João Andrade':'ex.: Gasolina'}"></label>
+      ${t==='receita' ? `<label class="field"><span>IRS retido pelo cliente</span><select class="input" id="rRet">${RET_OPTS.map(([k,l]) => `<option value="${k}" ${+k === +(S.settings.retencaoPadrao||0) ? 'selected' : ''}>${l}</option>`).join('')}</select></label>` : `<label class="field"><span>Dividir com a Diana (Splitwise)</span><select class="input" id="rShare">${SHARE_OPTS.map(([k,l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>`}
       ${t==='despesa' && S.categories.find(c=>c.nome==='Impostos') ? `<label class="field" id="impWrap" style="display:none"><span>Que imposto estás a pagar?</span><select class="input" id="rImp"><option value="iva">IVA</option><option value="ss">Segurança Social</option><option value="irs">IRS</option><option value="">Outro (coima, etc.)</option></select></label>` : ''}
       ${dateField}
       <div id="rPreview"></div>
       <button class="btn" id="rSave">Guardar</button>`;
     const text = $('#rText'), valor = $('#rValor'), desc = $('#rDesc');
-    const cat = $('#rCat'), ivaSel = $('#rIva'), impWrap = $('#impWrap');
+    const cat = $('#rCat'), ivaSel = $('#rIva'), impWrap = $('#impWrap'), retSel = $('#rRet'), shareSel = $('#rShare');
+    if (retSel) retSel.onchange = preview;
     let touched = { valor:false, desc:false, cat:false };
     valor.oninput = () => { touched.valor = true; preview(); };
     desc.oninput = () => { touched.desc = true; };
@@ -1108,20 +1170,22 @@ AFTER.registar = () => {
       if (!touched.desc && p.desc) desc.value = p.desc;
       if (cat && !touched.cat && p.cat){ cat.value = p.cat; if (impWrap) impWrap.style.display = p.cat === 'Impostos' ? '' : 'none'; }
       if (ivaSel && p.tipo === 'receita') ivaSel.value = p.comIva ? '1' : '0';
+      if (retSel && p.tipo === 'receita' && p.retPct !== undefined) retSel.value = String(p.retPct);
+      if (shareSel && p.share) shareSel.value = String(p.share);
       preview();
     };
     function preview(){
       const pv = $('#rPreview'); const v = parseNum(valor.value);
       if (t !== 'receita' || isNaN(v) || v <= 0){ pv.innerHTML = ''; return; }
-      const r = S.rules; const comIva = ivaSel.value === '1';
-      const iva = comIva ? r2(v * r.ivaTaxa) : 0, ss = r2(v * r.ssCoeficiente * r.ssTaxa), irs = r2(v * (S.settings.irsPct||0) / 100);
+      const r = S.rules; const c = receitaCalc(S, v, ivaSel.value === '1', +retSel.value);
       pv.innerHTML = `<section class="note amber" style="display:flex;flex-direction:column;gap:8px;padding:14px">
-        <strong>A app põe de lado automaticamente</strong>
-        <div class="between"><span>Total recebido</span><b>${eur(v + iva)}</b></div>
-        <div class="between"><span>IVA (fundo IVA)</span><b>${eur(iva)}</b></div>
-        <div class="between"><span>Segurança Social · ${eur(v)} × ${Math.round(r.ssCoeficiente*100)}% × ${String(r2(r.ssTaxa*100)).replace('.',',')}%</span><b>${eur(ss)}</b></div>
-        <div class="between"><span>IRS · ${S.settings.irsPct}% definido por ti</span><b>${eur(irs)}</b></div>
-        <div class="between" style="border-top:1px solid #FDE68A;padding-top:8px;color:var(--teal);font-size:15px"><span><b>Fica para ti</b></span><b>${eur(v - ss - irs)}</b></div>
+        <div class="between"><span>Serviço ${eur(c.base)}${c.iva ? ` + IVA ${eur(c.iva)}` : ''}${c.ret ? ` − IRS retido ${eur(c.ret)}` : ''}</span></div>
+        <div class="between" style="font-size:15px"><span><b>Entra na conta</b></span><b>${eur(c.valor)}</b></div>
+        <strong style="margin-top:4px">A app põe de lado automaticamente</strong>
+        <div class="between"><span>IVA (pote do IVA)</span><b>${eur(c.reservas.iva)}</b></div>
+        <div class="between"><span>Segurança Social · ${eur(c.base)} × ${Math.round(r.ssCoeficiente*100)}% × ${String(r2(r.ssTaxa*100)).replace('.',',')}%</span><b>${eur(c.reservas.ss)}</b></div>
+        <div class="between"><span>IRS extra (${S.settings.irsPct}% − ${c.retPct}% já retido)</span><b>${eur(c.reservas.irs)}</b></div>
+        <div class="between" style="border-top:1px solid #FDE68A;padding-top:8px;color:var(--teal);font-size:15px"><span><b>Fica para ti</b></span><b>${eur(c.valor - c.reservas.iva - c.reservas.ss - c.reservas.irs)}</b></div>
         <small>Regras fiscais ${esc(r.versao)}</small></section>`;
     }
     text.oninput = fromText;
@@ -1131,12 +1195,12 @@ AFTER.registar = () => {
       if (isNaN(v) || v <= 0){ toast('Indica um valor'); valor.focus(); return; }
       const data = $('#rData').value || iso(today());
       if (t === 'receita'){
-        addReceita(S, { data, desc: desc.value.trim() || 'Recibo', base:v, comIva: ivaSel.value === '1' });
-        toast('Receita registada e reservas feitas');
+        addReceita(S, { data, desc: desc.value.trim() || 'Recibo', base:v, comIva: ivaSel.value === '1', retPct:+retSel.value });
+        toast('Recibo registado e reservas feitas');
       } else {
         const m = { id:uid(), data, tipo:'despesa', valor:r2(v), cat:cat.value, desc: desc.value.trim() || cat.value };
         if (cat.value === 'Impostos' && $('#rImp')) m.impTipo = $('#rImp').value;
-        S.movs.push(m); toast('Despesa registada');
+        S.movs.push(m); if (shareSel && +shareSel.value) applyShare(m, +shareSel.value); toast('Despesa registada');
       }
       REG = null; save(); go('hoje');
     };
@@ -1144,17 +1208,21 @@ AFTER.registar = () => {
   }
   if (t === 'transferencia'){
     const goals = S.goals.filter(g => g.fase === 1 || fase() === 2);
-    body.innerHTML = `<p class="note blue">Dinheiro que sai da conta para uma meta (fundo de emergência, reserva, PPR, investir). Não conta como gasto.</p>
+    body.innerHTML = `<p class="note blue">Dinheiro entre a conta e uma meta (fundo de emergência, PPR, investir). Não conta como gasto nem como recibo.</p>
+      <div class="seg" style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><button type="button" class="btn sm" id="tPor">Pôr na meta</button><button type="button" class="btn sm sec" id="tTirar">Tirar da meta</button></div>
       <label class="field"><span>Meta</span><select class="input" id="tMeta">${goals.map(g => `<option value="${g.id}" ${g.id===REG.metaId?'selected':''}>${esc(g.nome)}</option>`).join('')}</select></label>
       <label class="field"><span>Valor</span><input class="input" id="tValor" inputmode="decimal" placeholder="0,00"></label>
       ${dateField}<button class="btn" id="tSave">Guardar</button>`;
     const sync = () => { const g = S.goals.find(x => x.id === $('#tMeta').value); const p = g ? Math.max(0, goalMonthly(g) - goalTransfersMonth(g.id, monthKey(today()))) : 0; if (p > 0) $('#tValor').value = String(p).replace('.', ','); };
-    $('#tMeta').onchange = sync; sync();
+    let tirar = false;
+    const modo = t => { tirar = t; $('#tPor').className = 'btn sm' + (t ? ' sec' : ''); $('#tTirar').className = 'btn sm' + (t ? '' : ' sec'); if (t) $('#tValor').value = ''; else sync(); };
+    $('#tPor').onclick = () => modo(false); $('#tTirar').onclick = () => modo(true);
+    $('#tMeta').onchange = () => { if (!tirar) sync(); }; sync();
     $('#tSave').onclick = () => {
       const v = parseNum($('#tValor').value); if (isNaN(v) || v <= 0){ toast('Indica um valor'); return; }
-      const g = S.goals.find(x => x.id === $('#tMeta').value);
-      S.movs.push({ id:uid(), data:$('#rData').value || iso(today()), tipo:'transferencia', valor:r2(v), metaId:g.id, desc:g.nome });
-      g.saldo = r2((g.saldo||0) + v); REG = null; save(); toast(`${eur(v)} para ${g.nome}`); go('metas');
+      const g = S.goals.find(x => x.id === $('#tMeta').value); const val = r2(tirar ? -v : v);
+      S.movs.push({ id:uid(), data:$('#rData').value || iso(today()), tipo:'transferencia', valor:val, metaId:g.id, desc:g.nome });
+      g.saldo = r2((g.saldo||0) + val); REG = null; save(); toast(tirar ? `${eur(v)} tirados de ${g.nome}` : `${eur(v)} para ${g.nome}`); go('metas');
     };
     return;
   }
@@ -1277,7 +1345,10 @@ function detectColumns(rows){
     const amount = find(/montante|^valor\b|importancia|amount|quantia/, /data|saldo/);
     const debit = find(/debito|^saida|levantamento/);
     const credit = find(/credito|^entrada|deposito/);
-    if (date >= 0 && desc >= 0 && (amount >= 0 || debit >= 0 || credit >= 0)) return { start: i + 1, date, desc, amount, debit, credit };
+    if (date >= 0 && desc >= 0 && (amount >= 0 || debit >= 0 || credit >= 0)){
+      const ex = re => r.findIndex(c => re.test(c));
+      return { start: i + 1, date, desc, amount, debit, credit, saldo: ex(/^saldo/), tipo: ex(/^tipo$/), cat: ex(/^categoria$/), lig: ex(/^ligacao$/), mes: ex(/^mes$/), ret: ex(/^retencao/), share: ex(/^splitwise/) };
+    }
   }
   // sem cabeçalho: adivinha pelas colunas
   const sample = rows.filter(r => r.length >= 3).slice(0, 30);
@@ -1302,12 +1373,30 @@ function statementItems(rows){
       if (!isNaN(d) && d !== 0) v = -Math.abs(d); else if (!isNaN(c) && c !== 0) v = Math.abs(c);
     }
     if (isNaN(v) || v === 0) continue;
-    out.push({ data, desc: String(r[C.desc] ?? '').replace(/\s+/g, ' ').trim() || 'Movimento', valor: r2(v) });
+    const g = k => C[k] >= 0 ? String(r[C[k]] ?? '').trim() : '';
+    const sd = C.saldo >= 0 ? parseAmountCell(r[C.saldo]) : NaN;
+    out.push({ data, desc: String(r[C.desc] ?? '').replace(/\s+/g, ' ').trim() || 'Movimento', valor: r2(v), saldo: isNaN(sd) ? null : sd, ordem: out.length,
+      pv: C.tipo >= 0 ? { tipo: norm(g('tipo')), cat: g('cat'), lig: g('lig'), mes: g('mes').slice(0,7), ret: g('ret'), share: g('share') } : null });
   }
   return out;
 }
 const ruleKey = desc => norm(desc).replace(/\d+/g, ' ').replace(/[^a-z ]/g, ' ').split(/\s+/).filter(w => w.length > 1).slice(0, 3).join(' ');
+function classifyFromFile(it){
+  const p = it.pv; if (!p || !p.tipo) return null;
+  const byName = (list, nome) => list.find(x => norm(x.nome) === norm(nome)) || list.find(x => nome && norm(x.nome).includes(norm(nome)));
+  const extra = { mesRef: p.mes || undefined, share: parseNum(p.share) || 0, ficheiro:true };
+  const map = { despesa:'despesa', fixa:'fixa', recibo:'recibo', 'recibo sem iva':'recibo_si', recibo_si:'recibo_si', entrada:'entrada', 'outra entrada':'entrada', divida:'divida', imposto:'imposto', interno:'interno', ignorar:'ignorar', meta:'meta', 'para meta':'meta' };
+  const kind = map[p.tipo]; if (!kind) return null;
+  if (kind === 'despesa') return { kind, cat: S.categories.some(c => c.nome === p.cat) ? p.cat : guessCategory(p.cat || it.desc), ...extra };
+  if (kind === 'fixa'){ const f = byName(S.fixas, p.lig); return f ? { kind, fixaId:f.id, ...extra } : { kind:'despesa', cat: S.categories.some(c => c.nome === p.cat) ? p.cat : guessCategory(it.desc), ...extra }; }
+  if (kind === 'divida'){ const d = byName(S.debts, p.lig) || matchDebt(norm(p.lig || it.desc)); return { kind, debtId: d?.id, debtNome: p.lig, ...extra }; }
+  if (kind === 'meta'){ const gl = byName(S.goals, p.lig); return { kind, goalId: gl?.id, goalNome: p.lig, ...extra }; }
+  if (kind === 'imposto') return { kind, impTipo: ['iva','ss','irs'].includes(norm(p.lig)) ? norm(p.lig) : '', ...extra };
+  if (kind === 'recibo' || kind === 'recibo_si') return { kind, retPct: parseNum(p.ret) || 0, ...extra };
+  return { kind, ...extra };
+}
 function classifyItem(it){
+  const fromFile = classifyFromFile(it); if (fromFile) return fromFile;
   const n = norm(it.desc); const abs = Math.abs(it.valor);
   const rule = (S.importRules || {})[ruleKey(it.desc)];
   if (rule){
@@ -1317,7 +1406,7 @@ function classifyItem(it){
   if (/\bpote\b|poupanca|mealheiro|cofre|objetivo|conta a prazo|entre contas|conta propria/.test(n)) return { kind:'interno' };
   if (it.valor > 0){
     if (/reembolso|devolucao|estorno|juros|mb ?way|anulacao|cashback/.test(n)) return { kind:'entrada' };
-    return { kind:'recibo' };
+    return { kind:'recibo', retPct: S.settings.retencaoPadrao || 0 };
   }
   const debt = matchDebt(n);
   const tax = /\biva\b/.test(n) ? 'iva' : /seg(uranca)?\.? ?soc|\bss\b|\biss\b/.test(n) ? 'ss' : /\birs\b/.test(n) ? 'irs' : (/autoridade tributaria|\bat\b|financas|dgci|estado/.test(n) ? '' : null);
@@ -1336,17 +1425,23 @@ function isDuplicate(it){
     return pos === (it.valor > 0) && Math.abs(m.valor - abs) < 0.011;
   });
 }
-const IMP_KINDS = [['despesa','Despesa'],['fixa','Fixa paga'],['recibo','Recibo c/ IVA'],['recibo_si','Recibo s/ IVA'],['entrada','Outra entrada'],['divida','Dívida'],['imposto','Imposto'],['interno','Interno (pote)'],['ignorar','Ignorar']];
+const IMP_KINDS = [['despesa','Despesa'],['fixa','Fixa paga'],['recibo','Recibo c/ IVA'],['recibo_si','Recibo s/ IVA'],['entrada','Outra entrada'],['divida','Dívida'],['meta','Meta (pôr/tirar)'],['imposto','Imposto'],['interno','Interno (pote)'],['ignorar','Ignorar']];
 let IMP = null;
 async function startImport(file){
   try {
     const rows = await readStatement(file);
     const items = statementItems(rows);
     if (!items.length) throw new Error('vazio');
-    items.sort((a, b) => b.data.localeCompare(a.data));
-    IMP = { file: file.name, items: items.map(it => {
-      const c = classifyItem(it); const fxPaid = c.kind === 'fixa' && S.movs.some(m => m.fixaId === c.fixaId && m.data.slice(0,7) === it.data.slice(0,7)); const dup = isDuplicate(it) || fxPaid; const antes = S.criado && it.data < S.criado;
-      return { ...it, ...c, cat: c.cat || (c.kind === 'despesa' ? 'Outros' : undefined), dup, antes, on: !dup && !antes && c.kind !== 'interno' && c.kind !== 'ignorar' };
+    // ordem cronológica do ficheiro (alguns bancos põem o mais recente em cima)
+    const asc = items.length < 2 || items[0].data <= items[items.length-1].data;
+    const chrono = asc ? items : [...items].reverse();
+    const first = chrono[0];
+    const inicio = { data: first.data, saldo: first.saldo != null ? r2(first.saldo - first.valor) : null };
+    items.forEach((it, i) => it.ordem = asc ? i : items.length - 1 - i);
+    items.sort((a, b) => b.data.localeCompare(a.data) || b.ordem - a.ordem);
+    IMP = { file: file.name, inicio, items: items.map(it => {
+      const c = classifyItem(it); const fxPaid = c.kind === 'fixa' && S.movs.some(m => m.fixaId === c.fixaId && mesDe(m) === (c.mesRef || it.data.slice(0,7))); const dup = isDuplicate(it) || fxPaid; const antes = !!S.criado && it.data < S.criado;
+      return { ...it, ...c, cat: c.cat || (c.kind === 'despesa' ? 'Outros' : undefined), dup, antes, hist:false, on: !dup && !antes && c.kind !== 'interno' && c.kind !== 'ignorar' };
     }) };
     go('importar');
   } catch(e){
@@ -1359,22 +1454,40 @@ function vImportar(){
   const it = IMP.items; const sel = it.filter(x => x.on);
   const cnt = k => it.filter(k).length;
   const opt = (list, v) => list.map(([k, l]) => `<option value="${esc(k)}" ${String(k) === String(v) ? 'selected' : ''}>${esc(l)}</option>`).join('');
+  const sm = 'style="height:40px;font-size:14px"';
   const rows = it.map((x, i) => {
-    let extra = '';
-    if (x.kind === 'despesa') extra = `<select class="input" data-i="${i}" data-f="cat" style="height:40px;font-size:14px">${opt(S.categories.map(c => [c.nome, c.nome]), x.cat)}</select>`;
-    if (x.kind === 'divida') extra = `<select class="input" data-i="${i}" data-f="debtId" style="height:40px;font-size:14px">${opt(S.debts.map(d => [d.id, d.nome]), x.debtId)}</select>`;
-    if (x.kind === 'fixa') extra = `<select class="input" data-i="${i}" data-f="fixaId" style="height:40px;font-size:14px">${opt(S.fixas.map(f => [f.id, f.nome]), x.fixaId)}</select>`;
-    if (x.kind === 'imposto') extra = `<select class="input" data-i="${i}" data-f="impTipo" style="height:40px;font-size:14px">${opt([['iva','IVA'],['ss','Segurança Social'],['irs','IRS'],['','Outro (coima…)']], x.impTipo)}</select>`;
-    const tag = x.dup ? '<span class="pill amber">Já registado?</span>' : x.antes ? '<span class="pill amber">Antes de usares a app</span>' : x.aprendido ? '<span class="pill teal">Como da última vez</span>' : '';
+    let extra = '', extra2 = '';
+    if (x.kind === 'despesa'){ extra = `<select class="input" data-i="${i}" data-f="cat" ${sm}>${opt(S.categories.map(c => [c.nome, c.nome]), x.cat)}</select>`;
+      extra2 = `<select class="input" data-i="${i}" data-f="share" ${sm} aria-label="Dividir com a Diana">${opt(SHARE_OPTS.map(([k, l]) => [k, k === '0' ? 'Splitwise: não' : 'Splitwise: ' + l]), x.share || 0)}</select>`; }
+    if (x.kind === 'divida') extra = `<select class="input" data-i="${i}" data-f="debtId" ${sm}>${x.debtId ? '' : `<option value="">${esc(x.debtNome ? 'Cria primeiro: ' + x.debtNome : 'Escolhe a dívida')}</option>`}${opt(S.debts.map(d => [d.id, d.nome]), x.debtId)}</select>`;
+    if (x.kind === 'meta') extra = `<select class="input" data-i="${i}" data-f="goalId" ${sm}>${x.goalId ? '' : `<option value="">${esc(x.goalNome ? 'Cria primeiro: ' + x.goalNome : 'Escolhe a meta')}</option>`}${opt(S.goals.map(g => [g.id, g.nome]), x.goalId)}</select>`;
+    if (x.kind === 'fixa') extra = `<select class="input" data-i="${i}" data-f="fixaId" ${sm}>${opt(S.fixas.map(f => [f.id, f.nome]), x.fixaId)}</select>`;
+    if (x.kind === 'imposto') extra = `<select class="input" data-i="${i}" data-f="impTipo" ${sm}>${opt([['iva','IVA'],['ss','Segurança Social'],['irs','IRS'],['','Outro (coima…)']], x.impTipo)}</select>`;
+    if (x.kind === 'recibo' || x.kind === 'recibo_si'){
+      extra = `<select class="input" data-i="${i}" data-f="retPct" ${sm} aria-label="IRS retido">${opt(RET_OPTS.map(([k, l]) => [k, k === '0' ? 'Sem retenção' : 'Retenção ' + l]), x.retPct || 0)}</select>`;
+      const c = receitaCalc(S, baseFromReceived(S, Math.abs(x.valor), x.kind === 'recibo', x.retPct), x.kind === 'recibo', x.retPct);
+      extra2 = `<p class="small muted" style="margin:0;grid-column:1/-1">Serviço ${eur(c.base)}${c.iva ? ` + IVA ${eur(c.iva)}` : ''}${c.ret ? ` − IRS retido ${eur(c.ret)}` : ''}</p>`;
+    }
+    const tag = x.dup ? '<span class="pill amber">Já registado?</span>' : x.hist ? '<span class="pill blue">Histórico</span>' : x.antes ? '<span class="pill amber">Antes do início das contas</span>' : x.ficheiro ? '<span class="pill teal">Classificado</span>' : x.aprendido ? '<span class="pill teal">Como da última vez</span>' : '';
+    const mesTag = x.mesRef && x.mesRef !== x.data.slice(0,7) ? ` · conta para ${MESES[+x.mesRef.slice(5,7) - 1]}` : '';
     return `<div class="card" style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;${x.on ? '' : 'opacity:.6'}">
       <div class="row" style="align-items:flex-start;gap:10px"><input type="checkbox" data-i="${i}" data-f="on" ${x.on ? 'checked' : ''} aria-label="Importar este movimento" style="width:22px;height:22px;margin-top:2px;accent-color:var(--teal);flex-shrink:0">
-        <div class="grow" style="flex:1;min-width:0"><p class="t15" style="margin:0;overflow-wrap:anywhere">${esc(x.desc)}</p><p class="small muted" style="margin:2px 0 0">${shortDate(x.data)} ${tag}</p></div>
+        <div class="grow" style="flex:1;min-width:0"><p class="t15" style="margin:0;overflow-wrap:anywhere">${esc(x.desc)}</p><p class="small muted" style="margin:2px 0 0">${shortDate(x.data)}${mesTag} ${tag}</p></div>
         <p class="num" style="margin:0;font-size:15px;${x.valor > 0 ? 'color:var(--teal)' : ''}">${x.valor > 0 ? '+' : '−'} ${eur(Math.abs(x.valor))}</p></div>
-      ${x.on ? `<div class="grid2"><select class="input" data-i="${i}" data-f="kind" style="height:40px;font-size:14px">${opt(IMP_KINDS, x.kind)}</select>${extra || '<span></span>'}</div>` : ''}
+      ${x.on ? `<div class="grid2"><select class="input" data-i="${i}" data-f="kind" ${sm}>${opt(IMP_KINDS, x.kind)}</select>${extra || '<span></span>'}${extra2}</div>` : ''}
     </div>`;
   }).join('');
+  const nAntes = cnt(x => x.antes);
+  const ini = IMP.inicio;
+  const banner = nAntes ? `<section class="note amber" style="display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:16px">
+      <b>${nAntes} movimento${nAntes === 1 ? '' : 's'} antes do início das contas (${shortDate(S.criado)})</b>
+      <span>Escolhe: recomeçar as contas no início deste extrato, ou guardar os anteriores só para as estatísticas.</span>
+      <label class="field"><span>Saldo no dia ${shortDate(ini.data)}, antes do 1.º movimento (conta à ordem + pote do IVA)</span><input class="input" id="iniSaldo" inputmode="decimal" value="${ini.saldo != null ? String(ini.saldo).replace('.', ',') : ''}" placeholder="0,00"></label>
+      <button class="btn sm" id="iniGo" type="button" style="width:100%">Recomeçar as contas a ${shortDate(ini.data)}</button>
+      <button class="btn sm sec" id="histGo" type="button" style="width:100%">Importar os anteriores como histórico</button></section>` : '';
   return `<main class="view">${backHeader('Importar extrato','movimentos')}
-  <p class="small muted" style="margin:0">${esc(IMP.file)} · ${it.length} movimentos · ${cnt(x => x.dup)} já registados · ${cnt(x => x.kind === 'interno')} internos (pote)${cnt(x => x.antes) ? ` · ${cnt(x => x.antes)} antes de começares` : ''}</p>
+  <p class="small muted" style="margin:0">${esc(IMP.file)} · ${it.length} movimentos · ${cnt(x => x.dup)} já registados · ${cnt(x => x.kind === 'interno')} internos (pote)</p>
+  ${banner}
   <p class="note blue">Confirma o tipo de cada um. Movimentos para o pote ficam como “Interno” e não contam. Da próxima vez lembro-me das tuas escolhas.</p>
   <div id="impList" style="display:flex;flex-direction:column;gap:10px">${rows}</div>
   <div style="position:sticky;bottom:calc(env(safe-area-inset-bottom) + 86px);display:flex;flex-direction:column;gap:8px"><button class="btn" id="impGo" ${sel.length ? '' : 'disabled style="opacity:.5"'}>Importar ${sel.length} movimento${sel.length === 1 ? '' : 's'}</button></div>
@@ -1382,34 +1495,63 @@ function vImportar(){
 }
 AFTER.importar = () => {
   const list = $('#impList'); if (!list) return;
+  const rerender = () => { const y = window.scrollY; render(); window.scrollTo(0, y); };
+  const ig = $('#iniGo'); if (ig) ig.onclick = () => {
+    const v = parseNum($('#iniSaldo').value); if (isNaN(v)){ toast('Indica o saldo nesse dia'); return; }
+    S.criado = IMP.inicio.data; S.settings.saldoInicial = r2(v);
+    for (const x of IMP.items){ if (x.antes){ x.antes = false; x.on = !x.dup && x.kind !== 'interno' && x.kind !== 'ignorar'; } }
+    save(); toast(`As contas passam a começar a ${shortDate(S.criado)}`); rerender();
+  };
+  const hg = $('#histGo'); if (hg) hg.onclick = () => {
+    for (const x of IMP.items){ if (x.antes){ x.antes = false; x.hist = true; x.on = !x.dup && x.kind !== 'interno' && x.kind !== 'ignorar'; } }
+    rerender();
+  };
   list.addEventListener('change', e => {
     const el = e.target; const i = +el.dataset.i, f = el.dataset.f; if (isNaN(i) || !f) return;
     const x = IMP.items[i];
-    if (f === 'on') x.on = el.checked; else x[f] = el.value;
+    if (f === 'on') x.on = el.checked; else if (f === 'share' || f === 'retPct') x[f] = +el.value; else x[f] = el.value;
     if (f === 'kind'){
       if (x.kind === 'despesa' && !x.cat) x.cat = guessCategory(x.desc);
       if (x.kind === 'divida' && !x.debtId) x.debtId = (matchDebt(norm(x.desc)) || S.debts[0] || {}).id;
+      if (x.kind === 'meta' && !x.goalId) x.goalId = (S.goals[0] || {}).id;
       if (x.kind === 'fixa' && !x.fixaId) x.fixaId = (matchFixa(norm(x.desc)) || S.fixas[0] || {}).id;
       if (x.kind === 'imposto' && x.impTipo === undefined) x.impTipo = 'iva';
+      if ((x.kind === 'recibo' || x.kind === 'recibo_si') && x.retPct === undefined) x.retPct = S.settings.retencaoPadrao || 0;
       if (x.kind === 'interno' || x.kind === 'ignorar') x.on = false;
     }
-    const y = window.scrollY; render(); window.scrollTo(0, y);
+    rerender();
   });
   const btn = $('#impGo'); if (btn) btn.onclick = () => {
-    let n = 0; S.importRules = S.importRules || {};
+    let n = 0, falta = 0; S.importRules = S.importRules || {};
     for (const x of IMP.items){
-      S.importRules[ruleKey(x.desc)] = { kind:x.kind, cat:x.cat, debtId:x.debtId, fixaId:x.fixaId, impTipo:x.impTipo };
+      if (!x.ficheiro) S.importRules[ruleKey(x.desc)] = { kind:x.kind, cat:x.cat, debtId:x.debtId, fixaId:x.fixaId, impTipo:x.impTipo, retPct:x.retPct };
       if (!x.on) continue;
       const abs = r2(Math.abs(x.valor)); const key = `${x.data}|${x.valor}|${norm(x.desc)}`; let m = null;
+      const fin = mv => { mv.importKey = key; if (x.mesRef && x.mesRef !== x.data.slice(0,7)) mv.mesRef = x.mesRef; if (x.hist) mv.historico = true; n++; };
       if (x.kind === 'despesa') m = { id:uid(), data:x.data, tipo:'despesa', valor:abs, cat:x.cat || 'Outros', desc:x.desc };
-      else if (x.kind === 'fixa'){ const f = S.fixas.find(z => z.id === x.fixaId); if (!f) continue; m = { id:uid(), data:x.data, tipo:'despesa', valor:abs, cat:f.cat, desc:f.nome, fixaId:f.id }; }
+      else if (x.kind === 'fixa'){ const f = S.fixas.find(z => z.id === x.fixaId); m = f ? { id:uid(), data:x.data, tipo:'despesa', valor:abs, cat:f.cat, desc:f.nome, fixaId:f.id } : { id:uid(), data:x.data, tipo:'despesa', valor:abs, cat:x.cat || guessCategory(x.desc), desc:x.desc }; }
       else if (x.kind === 'imposto') m = { id:uid(), data:x.data, tipo:'despesa', valor:abs, cat:'Impostos', impTipo:x.impTipo || '', desc:x.desc };
-      else if (x.kind === 'recibo' || x.kind === 'recibo_si'){ const com = x.kind === 'recibo'; const mv = addReceita(S, { data:x.data, desc:x.desc, base: com ? r2(abs / (1 + S.rules.ivaTaxa)) : abs, comIva:com }); mv.valor = abs; if (com) mv.iva = mv.reservas.iva = r2(abs - mv.base); mv.importKey = key; n++; continue; }
+      else if (x.kind === 'recibo' || x.kind === 'recibo_si'){
+        const com = x.kind === 'recibo'; const ret = +x.retPct || 0;
+        const mv = addReceita(S, { data:x.data, desc:x.desc, base: baseFromReceived(S, abs, com, ret), comIva:com, retPct:ret });
+        mv.valor = abs; fin(mv); continue;   // o valor que entrou é o do banco (evita diferenças de cêntimos)
+      }
       else if (x.kind === 'entrada') m = { id:uid(), data:x.data, tipo:'receita', valor:abs, base:abs, iva:0, comIva:false, cat:'Outras entradas', desc:x.desc, reservas:{ iva:0, ss:0, irs:0 } };
-      else if (x.kind === 'divida'){ const d = S.debts.find(z => z.id === x.debtId); if (!d) continue; const v = r2(d.tipo === 'splitwise' ? abs : Math.min(abs, Math.max(0, d.saldo))); S.movs.push({ id:uid(), data:x.data, tipo:'divida', valor:v, dividaId:d.id, desc:d.nome, importKey:key }); d.saldo = r2(d.saldo - v); n++; continue; }
-      if (m){ m.importKey = key; S.movs.push(m); n++; }
+      else if (x.kind === 'divida'){
+        const d = S.debts.find(z => z.id === x.debtId); if (!d){ falta++; continue; }
+        const v = r2(d.tipo === 'splitwise' || x.hist ? abs : Math.min(abs, Math.max(0, d.saldo)));
+        const mv = { id:uid(), data:x.data, tipo:'divida', valor:v, dividaId:d.id, desc:d.nome }; S.movs.push(mv); fin(mv);
+        if (!x.hist) d.saldo = r2(d.saldo - v); continue;
+      }
+      else if (x.kind === 'meta'){
+        const g = S.goals.find(z => z.id === x.goalId); if (!g){ falta++; continue; }
+        const val = x.valor > 0 ? -abs : abs;   // valor positivo no banco = dinheiro que voltou da meta
+        const mv = { id:uid(), data:x.data, tipo:'transferencia', valor:val, metaId:g.id, desc:g.nome }; S.movs.push(mv); fin(mv);
+        if (!x.hist) g.saldo = r2((g.saldo || 0) + val); continue;
+      }
+      if (m){ S.movs.push(m); fin(m); if (m.tipo === 'despesa' && x.share) applyShare(m, x.share); }
     }
-    save(); IMP = null; toast(`${n} movimento${n === 1 ? '' : 's'} importado${n === 1 ? '' : 's'}`); go('movimentos');
+    save(); IMP = null; toast(`${n} movimento${n === 1 ? '' : 's'} importado${n === 1 ? '' : 's'}${falta ? ` · ${falta} sem dívida/meta escolhida (não importados)` : ''}`); go('movimentos');
   };
 };
 
@@ -1435,10 +1577,10 @@ AFTER.movimentos = () => {
 function vMes(){
   const t = today(); const d = new Date(t.getFullYear(), t.getMonth() + mesOffset, 1); const mk = monthKey(d);
   const ms = movsMonth(mk).filter(m => m.tipo === 'despesa' && m.cat !== 'Impostos');
-  const gasto = sum(ms, m => m.valor);
-  const fixas = sum(ms.filter(m => m.fixaId), m => m.valor);
+  const gasto = sum(ms, proprio);
+  const fixas = sum(ms.filter(m => m.fixaId), proprio);
   const orc = sum(S.categories, c => c.orc || 0);
-  const byCat = S.categories.map(c => ({ ...c, v: sum(ms.filter(m => m.cat === c.nome), m => m.valor) })).filter(c => c.v > 0 || c.orc > 0);
+  const byCat = S.categories.map(c => ({ ...c, v: sum(ms.filter(m => m.cat === c.nome), proprio) })).filter(c => c.v > 0 || c.orc > 0);
   // média dos 6 meses anteriores por categoria (só meses com registos)
   const prevKeys = [...Array(6)].map((_, i) => monthKey(new Date(d.getFullYear(), d.getMonth() - 1 - i, 1)));
   const withData = prevKeys.filter(k => movsMonth(k).length);
@@ -1446,7 +1588,7 @@ function vMes(){
   if (withData.length >= 2){
     let best = null;
     for (const c of byCat){
-      const avg = sum(withData, k => sum(movsMonth(k).filter(m => m.tipo === 'despesa' && m.cat === c.nome), m => m.valor)) / withData.length;
+      const avg = sum(withData, k => sum(movsMonth(k).filter(m => m.tipo === 'despesa' && m.cat === c.nome), proprio)) / withData.length;
       if (avg > 20 && c.v > avg * 1.15){ const pct = Math.round((c.v / avg - 1) * 100); if (!best || pct > best.pct) best = { nome:c.nome, pct }; }
     }
     if (best) insight = `<p class="note blue">${esc(best.nome)} este mês está ${best.pct}% acima da tua média de ${withData.length} meses.</p>`;
@@ -1521,7 +1663,7 @@ function vMetas(){
     return `<button class="card" data-goal="${g.id}" style="display:flex;flex-direction:column;gap:8px;text-align:left;cursor:pointer;color:inherit;width:100%">
       <div class="between" style="width:100%"><p class="t15" style="margin:0">${esc(g.nome)}</p><p class="num" style="margin:0;font-size:15px">${eur0(g.saldo)}</p></div>
       <div style="width:100%">${bar(pct, g.tipo==='emergencia'?'#7C3AED':'')}</div>
-      <div class="between small muted" style="width:100%"><span>${sub}</span><span>${mensal ? '+' + eur0(mensal) + '/mês' : (g.alvo ? `meta ${eur0(g.alvo)}` : '')}</span></div></button>`;
+      <div class="between small muted" style="width:100%"><span>${sub}</span><span>${mensal ? '+' + eur0(mensal) + '/mês' : (g.alvo ? (g.saldo >= g.alvo ? 'cheio ✓' : `faltam ${eur0(g.alvo - g.saldo)}`) : '')}</span></div></button>`;
   };
   return `<main class="view">
   <h1>Metas</h1>
@@ -1531,9 +1673,16 @@ function vMetas(){
     <span>Depois, ${eur0(S.settings.valorFuturo || 0)}/mês passam para as metas do futuro.</span></section>`
   : `<section class="note green" style="display:flex;flex-direction:column;gap:6px;padding:16px;border-radius:20px"><b style="font-size:12px;letter-spacing:.4px">FASE 2 · CONSTRUIR</b><span style="font-size:15px;font-weight:600">Sem dívidas. ${eur0(S.settings.valorFuturo || 0)}/mês vão para o futuro, antes de gastares.</span></section>`}
   ${now.map(goalCard).join('')}
+  <button class="btn ghost" id="addGoal">+ Nova meta</button>
   <section class="card" style="padding:12px 16px 4px">
-    <div class="between"><p class="t15" style="margin:0">Futuro${F===1 ? ` · começa em ${futureStartLabel()}` : ''}</p><button class="btn sm sec" id="editFut">Ajustar</button></div>
-    <div class="list">${fut.map(g => `<div class="item">${F===1 ? `<span class="muted">${ic('lock',18)}</span>` : ''}<p class="grow t15">${esc(g.nome)}</p><p class="small muted">${g.pct}% · ${eur0(goalMonthly(g))}/mês${g.saldo ? ` · tens ${eur0(g.saldo)}` : ''}</p></div>`).join('')}</div>
+    <div class="between"><p class="t15" style="margin:0">Depois das dívidas${F===1 ? ` · ${futureStartLabel()}` : ''}</p><button class="btn sm sec" id="editFut">Ajustar</button></div>
+    <div class="list">${(() => { const em = fut.find(g => g.tipo === 'emergencia' && g.alvo > 0); const pc = fut.filter(g => g !== em && g.tipo !== 'emergencia');
+      const lock = F===1 ? `<span class="muted">${ic('lock',18)}</span>` : '';
+      const rowP = g => `<div class="item">${lock}<p class="grow t15">${esc(g.nome)}</p><p class="small muted">${g.pct}% · ${eur0(goalMonthly(g))}/mês${g.saldo ? ` · tens ${eur0(g.saldo)}` : ''}</p></div>`;
+      if (!em) return pc.map(rowP).join('');
+      const cheio = !emergEtapa() && F === 2;
+      return `<p class="small muted" style="margin:6px 0 0">1.º passo</p><button class="item" data-goal="${em.id}" style="width:100%;background:none;border:none;text-align:left;color:inherit;cursor:pointer">${lock}<p class="grow t15">${esc(em.nome)}</p><p class="small muted">${cheio ? 'cheio ✓' : `até ${eur0(em.alvo)} · tens ${eur0(em.saldo || 0)}`}</p></button>
+        <p class="small muted" style="margin:10px 0 0">2.º passo · quando o fundo estiver cheio</p>${pc.map(rowP).join('')}`; })()}</div>
   </section>
   <a href="#registar" id="toTransfer" class="btn sec" style="display:flex;align-items:center;justify-content:center;text-decoration:none">Transferir para uma meta</a>
   <a href="#patrimonio" class="card between" style="text-decoration:none;color:inherit"><div><p class="t15" style="margin:0">Património líquido</p><p class="small muted" style="margin:2px 0 0">o que tens menos o que deves</p></div><div class="row" style="gap:6px"><span class="num" style="font-size:17px">${eur0(patrimonio().liquido)}</span>${ic('chev',20)}</div></a>
@@ -1548,13 +1697,25 @@ AFTER.metas = () => {
       { k:'nome', label:'Nome', value:g.nome },
       { k:'saldo', label:'Quanto tens hoje', type:'num', value:g.saldo },
       { k:'alvo', label:'Meta (valor a atingir)', type:'num', value:g.alvo, hint: g.tipo==='emergencia' ? 'Sugestão: 3 a 6 meses de despesa' : g.tipo==='reserva' ? 'Sugestão: 1 a 2 vezes o mês base' : '' },
-      { k:'mensal', label:'Pôr por mês (sai antes do Livre para gastar)', type:'num', value:g.mensal }
-    ], out => { Object.assign(g, { nome:out.nome.trim() || g.nome, saldo:r2(out.saldo), alvo:r2(out.alvo), mensal:r2(out.mensal) }); });
+      ...(g.tipo === 'emergencia' ? [{ k:'fase', label:'Quando', type:'select', value:String(g.fase), options:[['2','Depois das dívidas (antes dos PPR e investimentos)'],['1','Já, ao mesmo tempo que pago as dívidas']] }] : []),
+      ...(g.fase === 2 && g.tipo !== 'emergencia' ? [] : [{ k:'mensal', label:'Pôr por mês (sai antes do Livre para gastar)', type:'num', value:g.mensal, hint: g.tipo === 'emergencia' ? 'Só conta se escolheres “Já”. Depois das dívidas, recebe o valor do futuro.' : '' }])
+    ], out => { Object.assign(g, { nome:out.nome.trim() || g.nome, saldo:r2(out.saldo), alvo:r2(out.alvo) }); if (out.mensal !== undefined) g.mensal = r2(out.mensal); if (out.fase) g.fase = +out.fase; if (g.fase === 2) g.mensal = 0; },
+    g.tipo === 'propria' ? () => { S.goals = S.goals.filter(x => x.id !== g.id); } : null);
+  });
+  $('#addGoal').onclick = () => formSheet('Nova meta', [
+    { k:'nome', label:'Nome', placeholder:'ex.: Fundo do Manel' },
+    { k:'alvo', label:'Valor a atingir', type:'num', value:'' },
+    { k:'saldo', label:'Quanto já tens', type:'num', value:0 },
+    { k:'mensal', label:'Pôr por mês (sai antes do Livre para gastar)', type:'num', value:0 }
+  ], out => {
+    const nome = out.nome.trim(); if (!nome){ toast('Indica o nome'); return false; }
+    S.goals.splice(S.goals.filter(g => g.fase === 1).length, 0, { id:'g_' + uid(), nome, saldo:r2(out.saldo), alvo:r2(out.alvo), mensal:r2(out.mensal), fase:1, pct:0, tipo:'propria' });
+    toast(`Meta “${nome}” criada`);
   });
   $('#editFut').onclick = () => {
-    const fut = S.goals.filter(g => g.fase === 2);
+    const fut = S.goals.filter(g => g.fase === 2 && g.tipo !== 'emergencia');
     formSheet('Metas do futuro', [
-      { k:'valor', label:'Valor por mês para o futuro', type:'num', value:S.settings.valorFuturo, hint:'Começa automaticamente quando a última dívida acabar.' },
+      { k:'valor', label:'Valor por mês para o futuro', type:'num', value:S.settings.valorFuturo, hint:'Começa automaticamente quando a última dívida acabar. Se o fundo de emergência estiver em “depois das dívidas”, este valor vai primeiro todo para ele até chegar à meta.' },
       ...fut.map(g => ({ k:g.id, label:`${g.nome} (%)`, type:'num', value:g.pct })),
       ...fut.map(g => ({ k:'s_'+g.id, label:`${g.nome} · quanto tens hoje`, type:'num', value:g.saldo }))
     ], out => {
@@ -1652,7 +1813,7 @@ function vImpostos(){
   const t = today(); const y = t.getFullYear(); const q = quarterOf(t);
   const [qa, qb] = quarterRange(y, q);
   const QA = iso(qa), QB = iso(qb);
-  const recQ = S.movs.filter(m => m.tipo === 'receita' && m.data >= QA && m.data <= QB);
+  const recQ = vivos().filter(m => m.tipo === 'receita' && m.cat !== 'Outras entradas' && m.data >= QA && m.data <= QB);
   const ivaQ = sum(recQ, m => m.iva || 0); const baseQ = sum(recQ, m => m.base || 0);
   const ssMensalProx = r2(baseQ * S.rules.ssCoeficiente * S.rules.ssTaxa / 3);
   const TB = taxBreakdown();
@@ -1680,7 +1841,12 @@ function vImpostos(){
       <div class="item"><p class="grow">IRS</p><p class="t15">${eur(TB.irs)}</p></div>
     </div>
     ${ivaPrev ? `<p class="small" style="margin:8px 0 0;color:var(--teal);font-weight:600">IVA do ${prevQ[1]}.º trimestre (${prevQ[0]}) pelos teus registos: ${eur(ivaPrev)}</p>` : ''}
-    <p class="small muted" style="margin:8px 0 0">Quando pagares, regista uma despesa na categoria Impostos e escolhe qual. A reserva desce sozinha.</p>
+    <p class="small muted" style="margin:8px 0 0">Quando pagares, regista na categoria Impostos e escolhe qual. Cada pagamento abate ao trimestre a que diz respeito (IVA: trimestre anterior; SS: contribuições de nov–jan são do 3.º trimestre, fev–abr do 4.º, mai–jul do 1.º, ago–out do 2.º).</p>
+  </section>
+  <section class="card" aria-label="Impostos de antes de começares" style="display:flex;flex-direction:column;gap:8px">
+    <div class="between"><p class="t15" style="margin:0">Por pagar de antes de começares</p><button class="btn sm sec" id="addOld">+ Adicionar</button></div>
+    <p class="small muted" style="margin:0">IVA ou Segurança Social de trimestres em que ainda não usavas a app (ex.: IVA do 3.º trimestre que pagas a 25 nov). Entram nas reservas até os pagares.</p>
+    ${(S.reservasAntigas || []).length ? `<div class="list">${S.reservasAntigas.map((a, i) => `<div class="item"><p class="grow small"><b>${a.tipo === 'ss' ? 'Segurança Social' : a.tipo.toUpperCase()}</b> ${qLabel(a.q)}<br><span class="muted">falta pagar ${eur(reserveFor(a.tipo, a.q))}</span></p><p class="t15">${eur(a.valor)}</p><button class="iconbtn" data-delold="${i}" aria-label="Apagar">${ic('trash',18)}</button></div>`).join('')}</div>` : ''}
   </section>
   <section class="card tight" aria-label="Próximos prazos"><p class="lbl" style="padding-top:10px">Próximos prazos</p><div class="list">
     ${dls.map((p, i) => `<div class="item"><div style="width:44px;text-align:center;flex-shrink:0"><p class="num" style="font-size:18px;line-height:1;${i<2?'color:var(--amber)':''}">${p.date.getDate()}</p><p class="small muted" style="margin-top:2px">${MES3[p.date.getMonth()]}</p></div><div class="grow"><p class="t15">${esc(p.nome)}</p><p class="small muted">${esc(p.ref)}</p></div></div>`).join('')}
@@ -1691,6 +1857,7 @@ function vImpostos(){
     <div class="list">
       <div class="item"><p class="grow small"><b>Recibos verdes</b><br><span class="muted">${recY.length} recibos · valor sem IVA</span></p><p class="t15">${eur(sum(recY, m => m.base || 0))}</p></div>
       <div class="item"><p class="grow small"><b>IVA liquidado</b><br><span class="muted">no ano</span></p><p class="t15">${eur(sum(recY, m => m.iva || 0))}</p></div>
+      <div class="item"><p class="grow small"><b>IRS já retido pelos clientes</b><br><span class="muted">adiantamento do IRS (conta no acerto anual)</span></p><p class="t15">${eur(sum(recY, m => m.retencao || 0))}</p></div>
       <div class="item"><p class="grow small"><b>Anexo J · ações</b><br><span class="muted">DEGIRO, Trade Republic: registo de compras/vendas na próxima versão</span></p></div>
     </div>
   </section>
@@ -1698,6 +1865,18 @@ function vImpostos(){
 }
 AFTER.impostos = () => {
   $('#ics').onclick = () => download('prazos-fiscais.ics', makeICS(), 'text/calendar');
+  const t = today(), y = t.getFullYear(), q = quarterOf(t);
+  const qs = []; { let yy = y, qq = q; for (let i = 0; i < 5; i++){ qs.push(`${yy}-Q${qq}`); if (--qq === 0){ qq = 4; yy--; } } }
+  $('#addOld').onclick = () => formSheet('Imposto por pagar de antes', [
+    { k:'tipo', label:'Imposto', type:'select', options:[['iva','IVA'],['ss','Segurança Social'],['irs','IRS']], value:'iva' },
+    { k:'q', label:'Diz respeito a', type:'select', options:[...qs.map(x => [x, qLabel(x).replace(/^do /, '')]), ['ano','IRS do ano']], value:qs[1] },
+    { k:'valor', label:'Valor por pagar', type:'num', value:'' }
+  ], out => {
+    if (!(out.valor > 0)){ toast('Indica o valor'); return false; }
+    S.reservasAntigas = S.reservasAntigas || []; S.reservasAntigas.push({ tipo:out.tipo, q: out.tipo === 'irs' ? 'ano' : out.q, valor:r2(out.valor) });
+    toast('Adicionado às reservas');
+  });
+  document.querySelectorAll('[data-delold]').forEach(b => b.onclick = async () => { if (await ask('Apagar este valor por pagar?', { ok:'Apagar', danger:true })){ S.reservasAntigas.splice(+b.dataset.delold, 1); save(); render(); } });
 };
 
 /* ---------- Ecrã: Definições ---------- */
@@ -1705,9 +1884,11 @@ function vDefinicoes(){
   const st = S.settings; const r = S.rules;
   return `<main class="view">${backHeader('Definições','hoje')}
   <section class="card tight"><div class="list">
-    ${setRow('saldoInicial','Saldo inicial da conta', eur(st.saldoInicial), 'O saldo no dia em que começaste a usar a app')}
+    ${setRow('criado','Início das contas', shortDate(S.criado || iso(today())) + ' ' + (S.criado || '').slice(0,4), 'A partir deste dia a app conta tudo')}
+    ${setRow('saldoInicial','Saldo inicial da conta', eur(st.saldoInicial), 'Conta à ordem + pote do IVA no início das contas')}
     ${setRow('mesBase','Mês base', st.mesBase ? eur0(st.mesBase) : 'por definir', 'Quanto contas receber num mês fraco')}
-    ${setRow('irsPct','Reserva para IRS', st.irsPct + '% de cada recibo', 'Para não teres surpresas no acerto anual')}
+    ${setRow('irsPct','Reserva para IRS', st.irsPct + '% de cada recibo', 'Total que queres ter para IRS (a parte já retida pelo cliente conta)')}
+    ${setRow('retencaoPadrao','IRS retido pelos clientes', (st.retencaoPadrao || 0) + '% (habitual)', 'Usado por defeito nos recibos novos; podes mudar em cada um')}
   </div></section>
   <section class="card tight"><p class="lbl" style="padding-top:10px">Regras fiscais · ${esc(r.versao)}</p><div class="list">
     <div class="item"><p class="grow">IVA</p><p class="t15">${String(r2(r.ivaTaxa*100)).replace('.',',')}%</p></div>
@@ -1734,8 +1915,11 @@ function vDefinicoes(){
 }
 function setRow(k, label, val, hint){ return `<button class="item" data-set="${k}" style="width:100%;background:none;border-left:none;border-right:none;border-bottom:none;text-align:left;cursor:pointer;color:inherit"><div class="grow"><p class="t15">${label}</p><p class="small muted">${hint}</p></div><p class="small" style="font-weight:600">${val}</p>${ic('chev',18)}</button>`; }
 AFTER.definicoes = () => {
-  const labels = { saldoInicial:'Saldo inicial da conta', mesBase:'Mês base (por mês)', irsPct:'Reserva para IRS (%)' };
-  document.querySelectorAll('[data-set]').forEach(b => b.onclick = () => { const k = b.dataset.set; formSheet(labels[k], [{ k:'v', label:labels[k], type:'num', value:S.settings[k] }], out => { S.settings[k] = r2(out.v); if (k === 'mesBase'){ const g = S.goals.find(x => x.id === 'reserva'); if (g && !g.alvo) g.alvo = r2(out.v); } }); });
+  const labels = { saldoInicial:'Saldo inicial da conta', mesBase:'Mês base (por mês)', irsPct:'Reserva para IRS (%)', retencaoPadrao:'IRS retido pelos clientes (%)' };
+  document.querySelectorAll('[data-set]').forEach(b => b.onclick = () => { const k = b.dataset.set;
+    if (k === 'criado') return formSheet('Início das contas', [{ k:'d', label:'Data de início', type:'date', value:S.criado || iso(today()) }, { k:'s', label:'Saldo nesse dia (conta à ordem + pote do IVA)', type:'num', value:S.settings.saldoInicial }],
+      out => { if (!out.d){ toast('Indica a data'); return false; } S.criado = out.d; S.settings.saldoInicial = r2(out.s); toast('Início das contas alterado'); });
+    formSheet(labels[k], [{ k:'v', label:labels[k], type:'num', value:S.settings[k] }], out => { S.settings[k] = r2(out.v); if (k === 'mesBase'){ const g = S.goals.find(x => x.id === 'reserva'); if (g && !g.alvo) g.alvo = r2(out.v); } }); });
   $('#editRules').onclick = () => formSheet('Taxas', [
     { k:'ano', label:'Ano das regras', type:'num', value:S.rules.ano },
     { k:'iva', label:'IVA (%)', type:'num', value:r2(S.rules.ivaTaxa*100) },
@@ -2005,7 +2189,17 @@ function onboarding(){
 }
 function migrate(){ if (!S.v) S.v = 1; if (S.onboarded === undefined) S.onboarded = true;
   for (const dc of DEFAULT_CATEGORIES){ const c = S.categories.find(x => x.nome === dc.nome); if (c){ c.kw = c.kw || []; for (const k of dc.kw) if (!c.kw.includes(k)) c.kw.push(k); } }
-  S.importRules = S.importRules || {}; S.settings = { ...freshState().settings, ...S.settings }; }
+  S.importRules = S.importRules || {}; S.marcas = S.marcas || {}; S.reservasAntigas = S.reservasAntigas || [];
+  if (!S.goals.some(g => g.id === 'ppr_joao')) S.goals.push({ id:'ppr_joao', nome:'PPR do João', saldo:0, alvo:0, mensal:0, fase:2, pct:0, tipo:'futuro' });
+  if (!S.mig142){ S.mig142 = true; const e = S.goals.find(g => g.tipo === 'emergencia'); if (e && e.fase === 1 && !(e.mensal > 0)) { e.fase = 2; e.mensal = 0; } }
+  S.settings = { ...freshState().settings, ...S.settings };
+  // categorias novas (entram a seguir à categoria indicada)
+  const addCat = (nome, after) => { if (S.categories.some(c => c.nome === nome)) return; const i = S.categories.findIndex(c => c.nome === after);
+    S.categories.splice(i >= 0 ? i + 1 : Math.max(0, S.categories.length - 1), 0, JSON.parse(JSON.stringify(DEFAULT_CATEGORIES.find(c => c.nome === nome)))); };
+  addCat('Entregas (Uber Eats, Glovo)', 'Comer fora');
+  const cf = S.categories.find(c => c.nome === 'Comer fora'); if (cf) cf.kw = cf.kw.filter(k => !['uber eats','glovo','bolt food','take'].includes(k));
+  addCat('Roupa e calçado', 'Bem-estar');
+}
 function lock(){ S = null; KEY = null; DEK_RAW = null; closeSheet(true); renderLogin(); }
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) hiddenAt = Date.now();
