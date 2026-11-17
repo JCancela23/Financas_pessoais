@@ -101,6 +101,9 @@ nav.tabs a.plus{width:58px;height:58px;margin-top:-24px;border-radius:29px;backg
   .rank.on{background:#E8EDF3;color:#0B121C}
   .bar{background:#22303F}
 }
+  .shortcuts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .shortcuts a,.shortcuts label{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:64px;padding:8px 4px;border-radius:16px;background:var(--card);border:1px solid var(--line);color:var(--ink);text-decoration:none;font-size:12.5px;font-weight:600;cursor:pointer;text-align:center}
+  .shortcuts svg{color:var(--teal)}
 </style>
 </head>
 <body>
@@ -112,7 +115,7 @@ nav.tabs a.plus{width:58px;height:58px;margin-top:-24px;border-radius:29px;backg
    Tudo corre no telemóvel. Dados encriptados (AES-GCM) com
    chave derivada da palavra-passe (PBKDF2). Sem servidores.
    ========================================================= */
-const APP_VERSION = '1.4.2';
+const APP_VERSION = '1.5';
 const STORE_KEY = 'vt_vault_v1';
 const LOCK_AFTER_MS = 2 * 60 * 1000;
 
@@ -187,6 +190,7 @@ const daysLeftInMonth = () => { const t = today(); return lastDay(t.getFullYear(
 const shortDate = isoStr => { const [y,m,d] = isoStr.split('-').map(Number); return `${d} ${MES3[m-1]}`; };
 
 const ICONS = {
+  card:'<rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M2.5 10h19M6.5 15h4"/>',
   home:'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
   cal:'<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   target:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
@@ -802,9 +806,9 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#sheetB
 function render(){
   if (!S){ renderLogin(); return; }
   route = location.hash.slice(1) || 'hoje';
-  const views = { hoje:vHoje, mes:vMes, metas:vMetas, impostos:vImpostos, registar:vRegistar, movimentos:vMovimentos, importar:vImportar, dividas:vDividas, patrimonio:vPatrimonio, definicoes:vDefinicoes };
+  const views = { hoje:vHoje, mes:vMes, metas:vMetas, impostos:vImpostos, registar:vRegistar, movimentos:vMovimentos, importar:vImportar, dividas:vDividas, patrimonio:vPatrimonio, investimentos:vInvestimentos, definicoes:vDefinicoes };
   const fn = views[route] || vHoje;
-  const active = { patrimonio:'metas', dividas:'metas', movimentos:'hoje', importar:'hoje', definicoes:'hoje' }[route] || route;
+  const active = { patrimonio:'metas', investimentos:'metas', dividas:'metas', movimentos:'hoje', importar:'hoje', definicoes:'hoje' }[route] || route;
   app.innerHTML = fn() + (route === 'registar' ? '' : tabs(active));
   window.scrollTo(0,0);
   const after = AFTER[route]; if (after) after();
@@ -861,6 +865,11 @@ function vHoje(){
   </form>
   <div id="quickPrev"></div>
   <button type="button" id="voiceHelp" class="small" style="align-self:flex-start;border:none;background:none;color:var(--teal);font-weight:600;padding:0;margin-top:-6px;cursor:pointer">O que posso dizer?</button>
+  <nav class="shortcuts" aria-label="Atalhos">
+    <a href="#movimentos">${ic('list',18)}<span>Movimentos</span></a>
+    <label>${ic('doc',18)}<span>Importar extrato</span><input type="file" id="stmtInH" accept=".csv,.txt,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="sr"></label>
+    <a href="#dividas">${ic('card',18)}<span>Dívidas</span></a>
+  </nav>
   ${pend.length || deb.length ? `<section class="card tight" aria-label="Por pagar este mês"><p class="lbl" style="padding-top:10px">Por pagar este mês</p><div class="list">
     ${pend.map(f => `<div class="item"><div class="grow"><p class="t15">${esc(f.nome)}</p><p class="small muted">dia ${f.dia} · ${esc(f.cat)}</p></div><p class="num" style="font-size:15px">${eur(f.valor)}</p><button class="btn sm sec" data-payfixa="${f.id}">Pago</button></div>`).join('')}
     ${deb.map(d => `<div class="item"><div class="grow"><p class="t15">${esc(d.nome)}${d.tipo==='estado'?'<span class="badge">ESTADO</span>':''}</p><p class="small muted">prestação · dia ${d.dia||'—'}</p></div><p class="num" style="font-size:15px">${eur(Math.min(d.prestacao,d.saldo))}</p><button class="btn sm sec" data-paydebt="${d.id}">Pago</button></div>`).join('')}
@@ -885,6 +894,7 @@ function movRow(m){
   return `<button class="item" data-mov="${m.id}" style="width:100%;background:none;border-left:none;border-right:none;border-bottom:none;text-align:left;cursor:pointer;color:inherit"><div class="grow"><p class="t15">${esc(m.desc || m.cat || '—')}</p><p class="small muted">${sub} · ${shortDate(m.data)}</p></div><p class="num" style="font-size:15px;${color}">${sign}${eur(Math.abs(m.valor))}</p></button>`;
 }
 AFTER.hoje = () => {
+  const sh = $('#stmtInH'); if (sh) sh.onchange = e => { const f = e.target.files[0]; if (f) startImport(f); };
   const inp = $('#quickIn'), prev = $('#quickPrev');
   let current = null;
   const show = () => {
@@ -1383,7 +1393,8 @@ function statementItems(rows){
 const ruleKey = desc => norm(desc).replace(/\d+/g, ' ').replace(/[^a-z ]/g, ' ').split(/\s+/).filter(w => w.length > 1).slice(0, 3).join(' ');
 function classifyFromFile(it){
   const p = it.pv; if (!p || !p.tipo) return null;
-  const byName = (list, nome) => list.find(x => norm(x.nome) === norm(nome)) || list.find(x => nome && norm(x.nome).includes(norm(nome)));
+  const core = t => norm(t).split(/\s+/).filter(w => w && !['do','da','de','dos','das','o','a','e'].includes(w)).join(' ');
+  const byName = (list, nome) => !nome ? null : list.find(x => norm(x.nome) === norm(nome)) || list.find(x => core(x.nome) === core(nome)) || list.find(x => norm(x.nome).includes(norm(nome)) || core(x.nome).includes(core(nome)) || (core(x.nome).length > 3 && core(nome).includes(core(x.nome))));
   const extra = { mesRef: p.mes || undefined, share: parseNum(p.share) || 0, ficheiro:true };
   const map = { despesa:'despesa', fixa:'fixa', recibo:'recibo', 'recibo sem iva':'recibo_si', recibo_si:'recibo_si', entrada:'entrada', 'outra entrada':'entrada', divida:'divida', imposto:'imposto', interno:'interno', ignorar:'ignorar', meta:'meta', 'para meta':'meta' };
   const kind = map[p.tipo]; if (!kind) return null;
@@ -1459,8 +1470,10 @@ function vImportar(){
     let extra = '', extra2 = '';
     if (x.kind === 'despesa'){ extra = `<select class="input" data-i="${i}" data-f="cat" ${sm}>${opt(S.categories.map(c => [c.nome, c.nome]), x.cat)}</select>`;
       extra2 = `<select class="input" data-i="${i}" data-f="share" ${sm} aria-label="Dividir com a Diana">${opt(SHARE_OPTS.map(([k, l]) => [k, k === '0' ? 'Splitwise: não' : 'Splitwise: ' + l]), x.share || 0)}</select>`; }
-    if (x.kind === 'divida') extra = `<select class="input" data-i="${i}" data-f="debtId" ${sm}>${x.debtId ? '' : `<option value="">${esc(x.debtNome ? 'Cria primeiro: ' + x.debtNome : 'Escolhe a dívida')}</option>`}${opt(S.debts.map(d => [d.id, d.nome]), x.debtId)}</select>`;
-    if (x.kind === 'meta') extra = `<select class="input" data-i="${i}" data-f="goalId" ${sm}>${x.goalId ? '' : `<option value="">${esc(x.goalNome ? 'Cria primeiro: ' + x.goalNome : 'Escolhe a meta')}</option>`}${opt(S.goals.map(g => [g.id, g.nome]), x.goalId)}</select>`;
+    const semDest = x.on && ((x.kind === 'divida' && !S.debts.some(d => d.id === x.debtId)) || (x.kind === 'meta' && !S.goals.some(g => g.id === x.goalId)));
+    if (x.kind === 'divida') extra = `<select class="input" data-i="${i}" data-f="debtId" style="height:40px;font-size:14px;${semDest ? 'border-color:var(--red,#DC2626)' : ''}">${semDest ? `<option value="">Escolhe a dívida…</option>` : ''}${opt(S.debts.map(d => [d.id, d.nome]), x.debtId)}<option value="__novo">+ Criar dívida${x.debtNome ? ' “' + esc(x.debtNome) + '”' : ''}</option></select>`;
+    if (x.kind === 'meta') extra = `<select class="input" data-i="${i}" data-f="goalId" style="height:40px;font-size:14px;${semDest ? 'border-color:var(--red,#DC2626)' : ''}">${semDest ? `<option value="">Escolhe a meta…</option>` : ''}${opt(S.goals.map(g => [g.id, g.nome]), x.goalId)}<option value="__novo">+ Criar meta${x.goalNome ? ' “' + esc(x.goalNome) + '”' : ''}</option></select>`;
+    if (semDest) extra2 = `<p class="small" style="margin:0;grid-column:1/-1;color:#B91C1C;font-weight:600">Sem ${x.kind === 'meta' ? 'meta' : 'dívida'} escolhida — assim não entra.</p>`;
     if (x.kind === 'fixa') extra = `<select class="input" data-i="${i}" data-f="fixaId" ${sm}>${opt(S.fixas.map(f => [f.id, f.nome]), x.fixaId)}</select>`;
     if (x.kind === 'imposto') extra = `<select class="input" data-i="${i}" data-f="impTipo" ${sm}>${opt([['iva','IVA'],['ss','Segurança Social'],['irs','IRS'],['','Outro (coima…)']], x.impTipo)}</select>`;
     if (x.kind === 'recibo' || x.kind === 'recibo_si'){
@@ -1468,7 +1481,7 @@ function vImportar(){
       const c = receitaCalc(S, baseFromReceived(S, Math.abs(x.valor), x.kind === 'recibo', x.retPct), x.kind === 'recibo', x.retPct);
       extra2 = `<p class="small muted" style="margin:0;grid-column:1/-1">Serviço ${eur(c.base)}${c.iva ? ` + IVA ${eur(c.iva)}` : ''}${c.ret ? ` − IRS retido ${eur(c.ret)}` : ''}</p>`;
     }
-    const tag = x.dup ? '<span class="pill amber">Já registado?</span>' : x.hist ? '<span class="pill blue">Histórico</span>' : x.antes ? '<span class="pill amber">Antes do início das contas</span>' : x.ficheiro ? '<span class="pill teal">Classificado</span>' : x.aprendido ? '<span class="pill teal">Como da última vez</span>' : '';
+    const tag = semDest ? '<span class="pill amber">Falta destino</span>' : x.dup ? '<span class="pill amber">Já registado?</span>' : x.hist ? '<span class="pill blue">Histórico</span>' : x.antes ? '<span class="pill amber">Antes do início das contas</span>' : x.ficheiro ? '<span class="pill teal">Classificado</span>' : x.aprendido ? '<span class="pill teal">Como da última vez</span>' : '';
     const mesTag = x.mesRef && x.mesRef !== x.data.slice(0,7) ? ` · conta para ${MESES[+x.mesRef.slice(5,7) - 1]}` : '';
     return `<div class="card" style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;${x.on ? '' : 'opacity:.6'}">
       <div class="row" style="align-items:flex-start;gap:10px"><input type="checkbox" data-i="${i}" data-f="on" ${x.on ? 'checked' : ''} aria-label="Importar este movimento" style="width:22px;height:22px;margin-top:2px;accent-color:var(--teal);flex-shrink:0">
@@ -1509,6 +1522,7 @@ AFTER.importar = () => {
   list.addEventListener('change', e => {
     const el = e.target; const i = +el.dataset.i, f = el.dataset.f; if (isNaN(i) || !f) return;
     const x = IMP.items[i];
+    if ((f === 'debtId' || f === 'goalId') && el.value === '__novo'){ rerender(); criarDestino(x, f, rerender); return; }
     if (f === 'on') x.on = el.checked; else if (f === 'share' || f === 'retPct') x[f] = +el.value; else x[f] = el.value;
     if (f === 'kind'){
       if (x.kind === 'despesa' && !x.cat) x.cat = guessCategory(x.desc);
@@ -1521,7 +1535,9 @@ AFTER.importar = () => {
     }
     rerender();
   });
-  const btn = $('#impGo'); if (btn) btn.onclick = () => {
+  const btn = $('#impGo'); if (btn) btn.onclick = async () => {
+    const sem = IMP.items.filter(x => x.on && ((x.kind === 'divida' && !S.debts.some(d => d.id === x.debtId)) || (x.kind === 'meta' && !S.goals.some(g => g.id === x.goalId))));
+    if (sem.length && !(await ask(`${sem.length} movimento${sem.length === 1 ? '' : 's'} não ${sem.length === 1 ? 'tem' : 'têm'} dívida ou meta escolhida e não ${sem.length === 1 ? 'vai' : 'vão'} entrar:\n${sem.slice(0, 4).map(x => '• ' + x.desc).join('\n')}${sem.length > 4 ? '\n…' : ''}\n\nO saldo da app vai ficar diferente do banco. Importar mesmo assim?`, { ok:'Importar os outros' }))) return;
     let n = 0, falta = 0; S.importRules = S.importRules || {};
     for (const x of IMP.items){
       if (!x.ficheiro) S.importRules[ruleKey(x.desc)] = { kind:x.kind, cat:x.cat, debtId:x.debtId, fixaId:x.fixaId, impTipo:x.impTipo, retPct:x.retPct };
@@ -1554,6 +1570,35 @@ AFTER.importar = () => {
     save(); IMP = null; toast(`${n} movimento${n === 1 ? '' : 's'} importado${n === 1 ? '' : 's'}${falta ? ` · ${falta} sem dívida/meta escolhida (não importados)` : ''}`); go('movimentos');
   };
 };
+
+function criarDestino(x, f, done){
+  if (f === 'debtId'){
+    formSheet('Nova dívida', [
+      { k:'nome', label:'A quem deves', value:x.debtNome || '' },
+      { k:'tipo', label:'Tipo', type:'select', options:DEBT_TYPES, value: /seguran|financ|estado/.test(norm(x.debtNome || x.desc)) ? 'estado' : 'cartao' },
+      { k:'saldo', label:'Quanto devias ANTES destes pagamentos', type:'num', value:'', hint:'Os pagamentos deste extrato são abatidos a seguir. Se não souberes, põe o valor de hoje e corrige depois.' },
+      { k:'prestacao', label:'Prestação mensal', type:'num', value:Math.abs(x.valor) }
+    ], out => {
+      if (!out.nome.trim()){ toast('Indica a quem deves'); return false; }
+      const d = { id:uid(), nome:out.nome.trim(), tipo:out.tipo, saldo:r2(out.saldo || 0), prestacao:r2(out.prestacao || 0), taeg:0, dia:0, nota:'' };
+      S.debts.push(d);
+      for (const y of IMP.items) if (y.kind === 'divida' && !S.debts.some(z => z.id === y.debtId) && norm(y.debtNome || '') === norm(x.debtNome || '')) y.debtId = d.id;
+      x.debtId = d.id; setTimeout(done, 0);
+    });
+  } else {
+    formSheet('Nova meta', [
+      { k:'nome', label:'Nome', value:x.goalNome || '' },
+      { k:'alvo', label:'Quanto queres juntar (opcional)', type:'num', value:'' },
+      { k:'saldo', label:'Quanto tinha ANTES destes movimentos', type:'num', value:0 }
+    ], out => {
+      if (!out.nome.trim()){ toast('Indica o nome'); return false; }
+      const g = { id:uid(), nome:out.nome.trim(), saldo:r2(out.saldo || 0), alvo:r2(out.alvo || 0), mensal:0, fase:1, pct:0, tipo:'propria' };
+      S.goals.push(g);
+      for (const y of IMP.items) if (y.kind === 'meta' && !S.goals.some(z => z.id === y.goalId) && norm(y.goalNome || '') === norm(x.goalNome || '')) y.goalId = g.id;
+      x.goalId = g.id; setTimeout(done, 0);
+    });
+  }
+}
 
 /* ---------- Ecrã: Movimentos ---------- */
 function vMovimentos(){
@@ -1686,6 +1731,7 @@ function vMetas(){
   </section>
   <a href="#registar" id="toTransfer" class="btn sec" style="display:flex;align-items:center;justify-content:center;text-decoration:none">Transferir para uma meta</a>
   <a href="#patrimonio" class="card between" style="text-decoration:none;color:inherit"><div><p class="t15" style="margin:0">Património líquido</p><p class="small muted" style="margin:2px 0 0">o que tens menos o que deves</p></div><div class="row" style="gap:6px"><span class="num" style="font-size:17px">${eur0(patrimonio().liquido)}</span>${ic('chev',20)}</div></a>
+  <a href="#investimentos" class="card between" style="text-decoration:none;color:inherit"><div><p class="t15" style="margin:0">Investimentos</p><p class="small muted" style="margin:2px 0 0">ações e ETF · à parte das contas</p></div><div class="row" style="gap:6px"><span class="num" style="font-size:15px">${inv().ativos.length ? eur0(invResumo().valor) : ''}</span>${ic('chev',18)}</div></a>
   <a href="#dividas" class="card between" style="text-decoration:none;color:inherit"><div><p class="t15" style="margin:0">Dívidas</p><p class="small muted" style="margin:2px 0 0">${S.debts.filter(d=>d.saldo>0.005).length} em aberto</p></div><div class="row" style="gap:6px"><span class="num" style="font-size:17px;color:var(--amber)">${eur0(sum(S.debts.filter(d=>d.saldo>0), d => d.saldo))}</span>${ic('chev',20)}</div></a>
   </main>`;
 }
@@ -1730,10 +1776,10 @@ AFTER.metas = () => {
 function patrimonio(){
   const conta = saldoConta();
   const fundos = sum(S.goals, g => g.saldo || 0);
-  const acoes = S.settings.investimentosValor || 0;
+  const acoes = invResumo().valor;   // mostrado à parte, NÃO soma ao património
   const aReceber = sum(S.debts.filter(d => d.saldo < 0), d => -d.saldo);
   const deve = sum(S.debts.filter(d => d.saldo > 0), d => d.saldo);
-  const tem = conta + fundos + acoes + aReceber;
+  const tem = conta + fundos + aReceber;
   return { conta, fundos, acoes, aReceber, tem, deve, liquido: r2(tem - deve) };
 }
 function vPatrimonio(){
@@ -1743,16 +1789,15 @@ function vPatrimonio(){
   return `<main class="view">${backHeader('Património','metas')}
   <section class="card"><p class="lbl">Património líquido</p><p class="num" style="font-size:40px;margin:2px 0 0">${eur0(P.liquido)}</p></section>
   <div class="grid2">
-    <section class="card" style="padding:14px"><p class="lbl">Tens</p><p class="num" style="font-size:22px;margin:2px 0 8px">${eur0(P.tem)}</p>${row('Conta', eur0(P.conta))}${row('Metas e fundos', eur0(P.fundos))}${row('Ações', eur0(P.acoes))}${P.aReceber ? row('A receber', eur0(P.aReceber)) : ''}</section>
+    <section class="card" style="padding:14px"><p class="lbl">Tens</p><p class="num" style="font-size:22px;margin:2px 0 8px">${eur0(P.tem)}</p>${row('Conta', eur0(P.conta))}${row('Metas e fundos', eur0(P.fundos))}${P.aReceber ? row('A receber', eur0(P.aReceber)) : ''}</section>
     <section class="card" style="padding:14px"><p class="lbl">Deves</p><p class="num" style="font-size:22px;margin:2px 0 8px;color:var(--amber)">${eur0(P.deve)}</p>${row('Estado', eur0(byType(['estado'])))}${row('Cartão', eur0(byType(['cartao'])))}${row('Créditos', eur0(byType(['credito','habitacao','automovel'])))}${row('Pessoas', eur0(byType(['splitwise','pessoal'])))}</section>
   </div>
-  <button class="btn sec" id="editAcoes">Atualizar valor das ações</button>
+  <a href="#investimentos" class="card between" style="text-decoration:none;color:inherit"><div><p class="t15" style="margin:0">Investimentos · à parte</p><p class="small muted" style="margin:2px 0 0">não somam ao património nem ao Livre</p></div><div class="row" style="gap:6px"><span class="num" style="font-size:15px">${eur0(P.acoes)}</span>${ic('chev',18)}</div></a>
   <a href="#dividas" class="btn sec" style="display:flex;align-items:center;justify-content:center;text-decoration:none">Ver dívidas</a>
-  <p class="small muted" style="margin:0">O valor das ações é atualizado por ti (o que a corretora mostra). O registo de compras e vendas para o Anexo J chega na próxima versão.</p>
   </main>`;
 }
 AFTER.patrimonio = () => {
-  $('#editAcoes').onclick = () => formSheet('Valor atual das ações', [{ k:'v', label:'Valor total na corretora', type:'num', value:S.settings.investimentosValor }], out => { S.settings.investimentosValor = r2(out.v); });
+
 };
 
 /* ---------- Ecrã: Dívidas ---------- */
@@ -1764,7 +1809,7 @@ function vDividas(){
   const total = sum(open, d => d.saldo);
   const rowD = (d, i) => {
     const endM = sim.end[d.id];
-    const info = d.tipo === 'splitwise' ? 'atualizas quando acertas contas' : `${d.prestacao ? eur0(d.prestacao) + '/mês' : 'sem prestação'}${endM ? ' · acaba ' + monthsToLabel(endM) : ''}`;
+    const info = d.tipo === 'splitwise' ? (d.acerto ? `acertado com o Splitwise a ${shortDate(d.acerto.data)}` : 'acerta com o valor do Splitwise') : `${d.prestacao ? eur0(d.prestacao) + '/mês' : 'sem prestação'}${endM ? ' · acaba ' + monthsToLabel(endM) : ''}`;
     return `<button class="item" data-debt="${d.id}" style="width:100%;background:none;border-left:none;border-right:none;border-bottom:none;text-align:left;cursor:pointer;color:inherit;align-items:flex-start">
       <span class="rank ${i<3?'on':''}">${i+1}</span>
       <div class="grow" style="display:flex;flex-direction:column;gap:4px"><div class="between"><p class="t15">${esc(d.nome)}${d.tipo==='estado'?'<span class="badge">ESTADO</span>':''}</p><p class="num" style="font-size:15px;color:var(--amber)">${eur0(d.saldo)}</p></div>
@@ -1777,6 +1822,10 @@ function vDividas(){
     <button type="button" data-strat="estado_juro" class="${S.settings.estrategia!=='menor'?'on':''}">Estado, depois maior juro</button>
     <button type="button" data-strat="menor" class="${S.settings.estrategia==='menor'?'on':''}">Menor valor primeiro</button></div>
   <section class="card tight">${open.length ? `<div class="list">${open.map(rowD).join('')}</div>` : '<p class="empty">Sem dívidas em aberto.</p>'}</section>
+  ${S.debts.filter(d => d.tipo === 'splitwise').map(d => `<section class="card" style="display:flex;flex-direction:column;gap:8px">
+    <div class="between"><p class="t15" style="margin:0">${esc(d.nome)} · Splitwise</p><p class="num" style="margin:0;font-size:17px;color:${d.saldo > 0 ? 'var(--amber)' : 'var(--teal)'}">${d.saldo < 0 ? 'devem-te ' : ''}${eur(Math.abs(d.saldo))}</p></div>
+    <p class="small muted" style="margin:0">Os gastos “a meias” baixam esta dívida logo. De vez em quando, copia o valor do Splitwise para ficar igual (apanha o que a outra pessoa pagou).${d.acerto ? ` Último acerto: ${shortDate(d.acerto.data)} (${eur(d.acerto.antes)} → ${eur(d.acerto.depois)}).` : ''}</p>
+    <button class="btn sm" data-acerto="${d.id}" type="button">Acertar com o Splitwise</button></section>`).join('')}
   <div class="grid2"><button class="btn sec" id="payD">Registar pagamento</button><button class="btn ghost" id="addD">+ Adicionar dívida</button></div>
   <section class="card"><div class="between"><p class="t15" style="margin:0">Reforço mensal</p><button class="btn sm sec" id="editRef">${eur0(S.settings.reforcoDivida)}/mês</button></div>
     <p class="small muted" style="margin:6px 0 0">Vai todo para a dívida n.º 1 da lista, além das prestações. Sai antes do Livre para gastar.</p></section>
@@ -1791,7 +1840,17 @@ AFTER.dividas = () => {
   $('#payD').onclick = () => go('registar', { tipo:'divida' });
   $('#editRef').onclick = () => formSheet('Reforço mensal das dívidas', [{ k:'v', label:'Valor extra por mês', type:'num', value:S.settings.reforcoDivida }], out => { S.settings.reforcoDivida = r2(out.v); });
   document.querySelectorAll('[data-debt]').forEach(b => b.onclick = () => debtForm(S.debts.find(d => d.id === b.dataset.debt)));
+  document.querySelectorAll('[data-acerto]').forEach(b => b.onclick = () => acertoSplitwise(S.debts.find(d => d.id === b.dataset.acerto)));
 };
+function acertoSplitwise(d){
+  formSheet(`Acertar ${d.nome} com o Splitwise`, [
+    { k:'v', label:'Quanto deves, segundo o Splitwise', type:'num', value:'', placeholder:String(d.saldo).replace('.', ','), hint:'Se for a outra pessoa a dever-te, escreve com menos (ex.: -40).' }
+  ], out => {
+    if (isNaN(out.v)){ toast('Indica o valor'); return false; }
+    const antes = d.saldo; d.saldo = r2(out.v); d.acerto = { data: iso(today()), antes, depois: d.saldo };
+    toast(`${d.nome}: ${eur(antes)} → ${eur(d.saldo)}`);
+  });
+}
 function debtForm(d){
   formSheet(d ? 'Editar dívida' : 'Nova dívida', [
     { k:'nome', label:'A quem deves', value:d?.nome || '', placeholder:'ex.: Cartão de crédito' },
@@ -1806,6 +1865,233 @@ function debtForm(d){
     const o = { nome:out.nome.trim(), tipo:out.tipo, saldo:r2(out.saldo), prestacao:r2(out.prestacao), taeg:r2(out.taeg), dia:Math.max(0, Math.min(31, Math.round(out.dia))), nota:out.nota.trim() };
     if (d) Object.assign(d, o); else S.debts.push({ id:uid(), ...o });
   }, d ? () => { S.debts = S.debts.filter(x => x.id !== d.id); } : null);
+}
+
+/* ---------- Investimentos (1.5) ----------
+   Ficam FORA do Livre para gastar e do património líquido. As operações vivem na corretora:
+   não mexem no saldo da conta (o dinheiro enviado para a corretora regista-se no banco). */
+const INV_PAISES = { US:['Estados Unidos',840], IE:['Irlanda',372], LU:['Luxemburgo',442], DE:['Alemanha',276], FR:['França',250], NL:['Países Baixos',528], GB:['Reino Unido',826], ES:['Espanha',724], IT:['Itália',380], CH:['Suíça',756], BE:['Bélgica',56], DK:['Dinamarca',208], SE:['Suécia',752], FI:['Finlândia',246], CA:['Canadá',124], JP:['Japão',392], PT:['Portugal',620] };
+const invPais = isin => { const k = String(isin || '').slice(0, 2).toUpperCase(); return INV_PAISES[k] ? { cod:k, nome:INV_PAISES[k][0], num:INV_PAISES[k][1] } : (k ? { cod:k, nome:k, num:'' } : null); };
+const inv = () => (S.inv = S.inv || { corretoras:['DEGIRO','Trade Republic'], ativos:[], ops:[] });
+const r4 = n => Math.round((+n || 0) * 10000) / 10000;
+const numFlex = s => { s = String(s ?? '').replace(/[\s€$"]/g, ''); if (!s) return NaN; const c = s.lastIndexOf(','), d = s.lastIndexOf('.');
+  if (c > -1 && d > -1) s = c > d ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, ''); else if (c > -1) s = s.replace(',', '.'); return parseFloat(s); };
+function invOrdered(ativoId){
+  return inv().ops.map((o, i) => ({ o, i })).filter(x => x.o.ativoId === ativoId && x.o.tipo !== 'dividendo')
+    .sort((a, b) => a.o.data.localeCompare(b.o.data) || (a.o.tipo === b.o.tipo ? a.i - b.i : a.o.tipo === 'compra' ? -1 : 1)).map(x => x.o);
+}
+// FIFO por lotes (regra do CIRS): cada venda consome primeiro as unidades mais antigas
+function invCalc(ativoId){
+  const lots = []; const linhas = []; const erros = [];
+  for (const o of invOrdered(ativoId)){
+    if (o.tipo === 'compra'){ lots.push({ data:o.data, qtd:+o.qtd, preco:+o.preco, comUnit: o.qtd ? (+o.comissao || 0) / o.qtd : 0, opId:o.id }); continue; }
+    let falta = +o.qtd; const comVendaUnit = o.qtd ? (+o.comissao || 0) / o.qtd : 0;
+    while (falta > 1e-9 && lots.length){
+      const L = lots[0]; const q = Math.min(L.qtd, falta);
+      const valorReal = r2(q * o.preco), valorAq = r2(q * L.preco), despesas = r2(q * (L.comUnit + comVendaUnit));
+      linhas.push({ ativoId, opId:o.id, dataReal:o.data, dataAq:L.data, qtd:r4(q), valorReal, valorAq, despesas, ganho:r2(valorReal - valorAq - despesas) });
+      L.qtd = r4(L.qtd - q); falta = r4(falta - q); if (L.qtd <= 1e-9) lots.shift();
+    }
+    if (falta > 1e-9) erros.push({ opId:o.id, falta });
+  }
+  const qtd = r4(lots.reduce((a, l) => a + l.qtd, 0));
+  const custo = r2(lots.reduce((a, l) => a + l.qtd * (l.preco + l.comUnit), 0));
+  return { lots, linhas, erros, qtd, custo, pm: qtd > 0 ? custo / qtd : 0 };
+}
+function invResumo(){
+  const I = inv(); let investido = 0, valor = 0, semPreco = 0;
+  const pos = I.ativos.map(a => { const c = invCalc(a.id); const v = c.qtd > 0 ? (a.preco ? r2(c.qtd * a.preco) : c.custo) : 0;
+    if (c.qtd > 0){ investido += c.custo; valor += v; if (!a.preco) semPreco++; } return { a, c, valor:v, dif:r2(v - c.custo) }; });
+  return { pos, investido:r2(investido), valor:r2(valor), dif:r2(valor - investido), semPreco };
+}
+function invAno(ano){
+  const y = String(ano); const linhas = []; const I = inv();
+  for (const a of I.ativos) for (const l of invCalc(a.id).linhas) if (l.dataReal.startsWith(y)) linhas.push({ ...l, ativo:a });
+  linhas.sort((p, q) => p.dataReal.localeCompare(q.dataReal));
+  const divs = I.ops.filter(o => o.tipo === 'dividendo' && o.data.startsWith(y)).map(o => ({ ...o, ativo: I.ativos.find(a => a.id === o.ativoId) }));
+  const ganhos = r2(sum(linhas, l => l.ganho)); const divBruto = r2(sum(divs, d => +d.valor || 0)); const retido = r2(sum(divs, d => +d.retido || 0));
+  const impMv = r2(Math.max(0, ganhos) * 0.28); const impDiv = r2(Math.max(0, divBruto * 0.28 - retido));
+  return { linhas, divs, ganhos, divBruto, retido, impMv, impDiv, imposto: r2(impMv + impDiv), vendas: new Set(linhas.map(l => l.opId)).size };
+}
+function vInvestimentos(){
+  const I = inv(); const R = invResumo(); const ano = today().getFullYear(); const A = invAno(ano);
+  const ativos = R.pos.filter(p => p.c.qtd > 0);
+  const fechadas = R.pos.filter(p => p.c.qtd <= 0 && invOrdered(p.a.id).length);
+  const sign = v => v > 0.005 ? 'var(--teal)' : v < -0.005 ? '#DC2626' : 'var(--muted)';
+  const fmtDif = (v, base) => `${v >= 0 ? '+' : '−'}${eur(Math.abs(v))}${base > 0 ? ` (${v >= 0 ? '+' : '−'}${(Math.abs(v) / base * 100).toFixed(1).replace('.', ',')}%)` : ''}`;
+  const qtdTxt = q => String(r4(q)).replace('.', ',');
+  const grupo = corr => { const ps = ativos.filter(p => p.a.corretora === corr); if (!ps.length) return '';
+    return `<p class="lbl" style="margin:6px 0 0">${esc(corr)}</p><section class="card tight"><div class="list">${ps.map(p => `<button class="item" data-ativo="${p.a.id}" style="width:100%;background:none;border-left:none;border-right:none;border-bottom:none;text-align:left;color:inherit;cursor:pointer">
+      <div class="grow"><p class="t15">${esc(p.a.nome)}</p><p class="small muted">${qtdTxt(p.c.qtd)} un. · preço médio ${eur(p.c.pm)}${p.a.preco ? '' : ' · <span style="color:var(--amber)">sem preço atual</span>'}</p></div>
+      <div style="text-align:right"><p class="num" style="margin:0;font-size:15px">${eur(p.valor)}</p><p class="small" style="margin:0;color:${sign(p.dif)}">${p.a.preco ? fmtDif(p.dif) : '—'}</p></div></button>`).join('')}</div></section>`; };
+  const corrs = [...new Set([...I.corretoras, ...ativos.map(p => p.a.corretora)])];
+  return `<main class="view">${backHeader('Investimentos','metas')}
+  <p class="note blue" style="display:flex;gap:8px;align-items:flex-start">${ic('lock',18)}<span>Não entra no “Livre para gastar” nem no património líquido. É dinheiro para o futuro, não para o dia a dia.</span></p>
+  ${ativos.length ? `<div class="grid2">
+    <section class="card" style="padding:14px"><p class="lbl">Investiste</p><p class="num" style="font-size:22px;margin:2px 0 0">${eur0(R.investido)}</p><p class="small muted" style="margin:2px 0 0">no que ainda tens</p></section>
+    <section class="card" style="padding:14px"><p class="lbl">Vale hoje</p><p class="num" style="font-size:22px;margin:2px 0 0">${eur0(R.valor)}</p><p class="small" style="margin:2px 0 0;color:${sign(R.dif)}">${fmtDif(R.dif, R.investido)}</p></section></div>
+    ${R.semPreco ? `<p class="small muted" style="margin:0">${R.semPreco} sem preço atual: conta pelo valor que pagaste. Toca em “Atualizar valores”.</p>` : ''}
+    ${corrs.map(grupo).join('')}` : `<section class="card" style="display:flex;flex-direction:column;gap:6px"><p class="t15" style="margin:0">Ainda sem investimentos</p><p class="small muted" style="margin:0">Regista cada compra (ou importa as transações da DEGIRO). A app calcula o preço médio e, quando venderes, o ganho para o IRS.</p></section>`}
+  <div class="grid2"><button class="btn" id="invReg" type="button">Registar operação</button><button class="btn sec" id="invPrecos" type="button" ${ativos.length ? '' : 'disabled style="opacity:.5"'}>Atualizar valores</button></div>
+  <label class="btn ghost" style="display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer">${ic('doc',18)} Importar transações da DEGIRO (CSV)<input type="file" id="invCsv" accept=".csv,text/csv" class="sr"></label>
+  <section class="card" style="display:flex;flex-direction:column;gap:6px">
+    <div class="between"><p class="t15" style="margin:0">IRS ${ano} · Anexo J</p><span class="pill ${A.vendas || A.divs.length ? 'amber' : 'teal'}">${A.vendas || A.divs.length ? 'a declarar' : 'nada a declarar'}</span></div>
+    <div class="between small"><span class="muted">Vendas no ano</span><b>${A.vendas}</b></div>
+    <div class="between small"><span class="muted">Ganhos − perdas</span><b style="color:${sign(A.ganhos)}">${A.ganhos >= 0 ? '+' : '−'}${eur(Math.abs(A.ganhos))}</b></div>
+    <div class="between small"><span class="muted">Dividendos (bruto)</span><b>${eur(A.divBruto)}</b></div>
+    <div class="between small"><span class="muted">Imposto retido lá fora</span><b>${eur(A.retido)}</b></div>
+    <div class="between small"><span class="muted">Imposto estimado (28%, sem englobar)</span><b>${eur(A.imposto)}</b></div>
+    ${A.ganhos < 0 ? `<p class="small muted" style="margin:0">Perdas: se declarares, podes abatê-las a ganhos dos 5 anos seguintes (se optares pelo englobamento).</p>` : ''}
+    <button class="btn sm sec" id="invAnexo" type="button" ${A.linhas.length || A.divs.length ? '' : 'disabled style="opacity:.5"'}>Ver linhas para o Anexo J</button>
+    <p class="small muted" style="margin:0">Estimativa para te preparares. Confirma na declaração ou com um contabilista.</p></section>
+  ${fechadas.length ? `<p class="small muted" style="margin:0">Vendidas por completo: ${fechadas.map(p => `<a href="#" data-ativo="${p.a.id}" style="color:var(--teal)">${esc(p.a.nome)}</a>`).join(', ')}</p>` : ''}
+  </main>`;
+}
+AFTER.investimentos = () => {
+  $('#invReg').onclick = () => invOpSheet();
+  const pr = $('#invPrecos'); if (pr) pr.onclick = invPrecosSheet;
+  $('#invAnexo').onclick = () => invAnexoSheet(today().getFullYear());
+  document.querySelectorAll('[data-ativo]').forEach(b => b.onclick = e => { e.preventDefault(); invAtivoSheet(b.dataset.ativo); });
+  $('#invCsv').onchange = async e => { const f = e.target.files[0]; if (!f) return; const r = invImportDegiro(await f.text()); e.target.value = '';
+    if (r.erro){ toast(r.erro); return; } save(); render(); toast(`${r.novas} operaç${r.novas === 1 ? 'ão' : 'ões'} importada${r.novas === 1 ? '' : 's'}${r.dup ? ` · ${r.dup} já existia${r.dup === 1 ? '' : 'm'}` : ''}`); };
+};
+function invOpSheet(pre = {}){
+  const I = inv(); let tipo = pre.tipo || 'compra';
+  const optsA = (corr) => I.ativos.filter(a => !corr || a.corretora === corr).map(a => `<option value="${a.id}" ${a.id === pre.ativoId ? 'selected' : ''}>${esc(a.nome)}</option>`).join('');
+  openSheet(`<div class="between"><h2>Registar operação</h2><button class="iconbtn" data-close aria-label="Fechar">${ic('x')}</button></div>
+    <div class="seg" role="group"><button type="button" data-t="compra">Compra</button><button type="button" data-t="venda">Venda</button><button type="button" data-t="dividendo">Dividendo</button></div>
+    <label class="field"><span>Corretora</span><select class="input" id="iCorr">${I.corretoras.map(c => `<option ${c === (pre.corretora || I.ativos.find(a => a.id === pre.ativoId)?.corretora) ? 'selected' : ''}>${esc(c)}</option>`).join('')}<option value="__nova">+ Outra corretora</option></select></label>
+    <label class="field"><span>Ação ou ETF</span><select class="input" id="iAtivo"></select></label>
+    <div id="iNovo" class="grid2"><label class="field"><span>Nome</span><input class="input" id="iNome" placeholder="ex.: ETF mundial"></label><label class="field"><span>ISIN (opcional)</span><input class="input" id="iIsin" placeholder="IE00…" autocapitalize="characters"></label></div>
+    <div class="grid2" id="iQP"><label class="field"><span>Quantidade</span><input class="input" id="iQtd" inputmode="decimal"></label><label class="field"><span>Preço por unidade (€)</span><input class="input" id="iPreco" inputmode="decimal"></label></div>
+    <div class="grid2" id="iDiv"><label class="field"><span>Dividendo bruto (€)</span><input class="input" id="iValor" inputmode="decimal"></label><label class="field"><span>Imposto retido lá fora (€)</span><input class="input" id="iRet" inputmode="decimal" value="0"></label></div>
+    <div class="grid2"><label class="field" id="iComF"><span>Comissão (€)</span><input class="input" id="iCom" inputmode="decimal" value="0"></label><label class="field"><span>Data</span><input class="input" id="iData" type="date" value="${pre.data || iso(today())}"></label></div>
+    <p class="note blue small" id="iPrev" style="margin:0"></p>
+    <button class="btn" id="iSave" type="button">Guardar</button>`, sh => {
+      const q = s => sh.querySelector(s);
+      const fillAtivos = () => { const corr = q('#iCorr').value; const o = optsA(corr); q('#iAtivo').innerHTML = (tipo === 'compra' ? `<option value="__novo">+ Nova ação ou ETF</option>` : '') + o; if (pre.ativoId && o.includes(pre.ativoId)) q('#iAtivo').value = pre.ativoId; else if (o && tipo !== 'compra') q('#iAtivo').selectedIndex = 0; else if (o) q('#iAtivo').selectedIndex = 1; sync(); };
+      const sync = () => {
+        sh.querySelectorAll('[data-t]').forEach(b => b.className = b.dataset.t === tipo ? 'on' : '');
+        const novo = q('#iAtivo').value === '__novo' || !q('#iAtivo').value && tipo === 'compra';
+        q('#iNovo').style.display = novo ? '' : 'none'; q('#iQP').style.display = tipo === 'dividendo' ? 'none' : ''; q('#iDiv').style.display = tipo === 'dividendo' ? '' : 'none'; q('#iComF').style.visibility = tipo === 'dividendo' ? 'hidden' : '';
+        const qt = numFlex(q('#iQtd').value), pr = numFlex(q('#iPreco').value), cm = numFlex(q('#iCom').value) || 0; const id = q('#iAtivo').value;
+        let t = '';
+        if (tipo === 'compra' && qt > 0 && pr > 0) t = `Total ${eur(qt * pr + cm)}. Não mexe no saldo da conta: o dinheiro já está na corretora.`;
+        if (tipo === 'venda' && id && id !== '__novo'){ const c = invCalc(id); t = `Tens ${String(c.qtd).replace('.', ',')} un.`; if (qt > 0 && pr > 0){ if (qt > c.qtd + 1e-9) t += ' Não podes vender mais do que tens.'; else { const sim = invSimVenda(id, qt, pr, cm, q('#iData').value); t += ` Ganho estimado: ${sim >= 0 ? '+' : '−'}${eur(Math.abs(sim))} (FIFO: vendem-se primeiro as mais antigas).`; } } }
+        if (tipo === 'dividendo'){ const v = numFlex(q('#iValor').value); if (v > 0) t = `Recebes ${eur(v - (numFlex(q('#iRet').value) || 0))} líquido. O imposto retido lá fora pode ser abatido no IRS.`; }
+        q('#iPrev').textContent = t; q('#iPrev').style.display = t ? '' : 'none';
+      };
+      sh.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tipo = b.dataset.t; fillAtivos(); });
+      q('#iCorr').onchange = async () => { if (q('#iCorr').value === '__nova'){ const n = await ask('Nome da corretora', { input:'text', placeholder:'ex.: Interactive Brokers', ok:'Adicionar' }); if (n && n.trim()){ I.corretoras.push(n.trim()); save(); invOpSheet({ ...pre, tipo, corretora:n.trim() }); return; } invOpSheet({ ...pre, tipo }); return; } fillAtivos(); };
+      ['#iAtivo','#iQtd','#iPreco','#iCom','#iValor','#iRet','#iData'].forEach(s => { q(s).oninput = sync; q(s).onchange = sync; });
+      fillAtivos();
+      q('#iSave').onclick = () => {
+        const corr = q('#iCorr').value; let id = q('#iAtivo').value; const data = q('#iData').value || iso(today());
+        if (!id || id === '__novo'){
+          if (tipo !== 'compra'){ toast('Escolhe a ação'); return; }
+          const nome = q('#iNome').value.trim(); if (!nome){ toast('Indica o nome da ação ou ETF'); return; }
+          const isin = q('#iIsin').value.trim().toUpperCase();
+          const ex = I.ativos.find(a => a.corretora === corr && (norm(a.nome) === norm(nome) || (isin && a.isin === isin)));
+          id = ex ? ex.id : (I.ativos.push({ id:uid(), nome, isin, corretora:corr, preco:0, precoData:'' }), I.ativos[I.ativos.length - 1].id);
+        }
+        if (tipo === 'dividendo'){ const v = numFlex(q('#iValor').value); if (!(v > 0)){ toast('Indica o valor do dividendo'); return; }
+          I.ops.push({ id:uid(), data, tipo, ativoId:id, valor:r2(v), retido:r2(numFlex(q('#iRet').value) || 0) }); }
+        else { const qt = numFlex(q('#iQtd').value), pr = numFlex(q('#iPreco').value), cm = numFlex(q('#iCom').value) || 0;
+          if (!(qt > 0) || !(pr > 0)){ toast('Indica a quantidade e o preço'); return; }
+          if (tipo === 'venda' && qt > invQtdAte(id, data) + 1e-9){ toast(`Nessa data só tinhas ${String(invQtdAte(id, data)).replace('.', ',')} un.`); return; }
+          I.ops.push({ id:uid(), data, tipo, ativoId:id, qtd:r4(qt), preco:r4(pr), comissao:r2(cm) });
+          if (tipo === 'compra'){ const a = I.ativos.find(x => x.id === id); if (!a.preco || data >= (a.precoData || '')){ a.preco = r4(pr); a.precoData = data; } } }
+        save(); closeSheet(true); render(); toast(tipo === 'compra' ? 'Compra registada' : tipo === 'venda' ? 'Venda registada' : 'Dividendo registado');
+      };
+    });
+}
+function invQtdAte(id, data){ const I = inv(); let q = 0; for (const o of I.ops) if (o.ativoId === id && o.data <= data){ if (o.tipo === 'compra') q += +o.qtd; if (o.tipo === 'venda') q -= +o.qtd; } return r4(q); }
+function invSimVenda(id, qt, pr, cm, data){
+  const I = inv(); const tmp = { id:'__sim', data: data || iso(today()), tipo:'venda', ativoId:id, qtd:qt, preco:pr, comissao:cm };
+  I.ops.push(tmp); const g = invCalc(id).linhas.filter(l => l.opId === '__sim').reduce((a, l) => a + l.ganho, 0); I.ops.pop(); return r2(g);
+}
+function invAtivoSheet(id){
+  const I = inv(); const a = I.ativos.find(x => x.id === id); if (!a) return; const c = invCalc(id);
+  const ops = I.ops.filter(o => o.ativoId === id).sort((p, q) => q.data.localeCompare(p.data));
+  const pais = invPais(a.isin);
+  openSheet(`<div class="between"><h2>${esc(a.nome)}</h2><button class="iconbtn" data-close aria-label="Fechar">${ic('x')}</button></div>
+    <p class="small muted" style="margin:0">${esc(a.corretora)}${a.isin ? ` · ${esc(a.isin)}` : ''}${pais ? ` · ${esc(pais.nome)}` : ''}</p>
+    <div class="grid2"><div class="card" style="padding:12px"><p class="lbl">Tens</p><p class="num" style="font-size:18px;margin:2px 0 0">${String(c.qtd).replace('.', ',')} un.</p><p class="small muted" style="margin:0">preço médio ${eur(c.pm)}</p></div>
+    <div class="card" style="padding:12px"><p class="lbl">Preço atual</p><p class="num" style="font-size:18px;margin:2px 0 0">${a.preco ? eur(a.preco) : '—'}</p><p class="small muted" style="margin:0">${a.precoData ? 'a ' + shortDate(a.precoData) : 'por atualizar'}</p></div></div>
+    ${c.lots.length > 1 ? `<p class="lbl" style="margin:4px 0 0">Lotes (para o IRS, vendem-se primeiro os mais antigos)</p><div class="list">${c.lots.map(l => `<div class="item"><p class="grow small">${shortDate(l.data)} ${l.data.slice(0,4)}</p><p class="small">${String(l.qtd).replace('.', ',')} un. a ${eur(l.preco)}</p></div>`).join('')}</div>` : ''}
+    <p class="lbl" style="margin:4px 0 0">Operações</p>
+    <div class="list">${ops.map(o => `<div class="item"><div class="grow"><p class="t15" style="margin:0">${o.tipo === 'compra' ? 'Compra' : o.tipo === 'venda' ? 'Venda' : 'Dividendo'} · ${shortDate(o.data)} ${o.data.slice(0,4)}</p><p class="small muted" style="margin:0">${o.tipo === 'dividendo' ? `bruto ${eur(o.valor)} · retido ${eur(o.retido || 0)}` : `${String(o.qtd).replace('.', ',')} × ${eur(o.preco)}${o.comissao ? ` + comissão ${eur(o.comissao)}` : ''}`}</p></div><button class="iconbtn" data-delop="${o.id}" aria-label="Apagar operação">${ic('trash',18)}</button></div>`).join('')}</div>
+    <div class="grid2"><button class="btn sm" id="aComp" type="button">Comprar mais</button><button class="btn sm sec" id="aVend" type="button" ${c.qtd > 0 ? '' : 'disabled style="opacity:.5"'}>Vender</button></div>
+    <button class="btn sm sec" id="aDiv" type="button">Registar dividendo</button>
+    <button class="btn sm ghost" id="aEdit" type="button">Editar nome / ISIN</button>`, sh => {
+      sh.querySelector('#aComp').onclick = () => invOpSheet({ tipo:'compra', ativoId:id });
+      const v = sh.querySelector('#aVend'); if (c.qtd > 0) v.onclick = () => invOpSheet({ tipo:'venda', ativoId:id });
+      sh.querySelector('#aDiv').onclick = () => invOpSheet({ tipo:'dividendo', ativoId:id });
+      sh.querySelector('#aEdit').onclick = () => formSheet('Editar', [{ k:'nome', label:'Nome', value:a.nome }, { k:'isin', label:'ISIN', value:a.isin || '' }], out => { a.nome = out.nome.trim() || a.nome; a.isin = out.isin.trim().toUpperCase(); },
+        () => { I.ops = I.ops.filter(o => o.ativoId !== id); I.ativos = I.ativos.filter(x => x.id !== id); });
+      sh.querySelectorAll('[data-delop]').forEach(b => b.onclick = async () => {
+        const o = I.ops.find(x => x.id === b.dataset.delop); const bak = I.ops.slice(); I.ops = I.ops.filter(x => x !== o);
+        const bad = invCalc(id).erros.length; I.ops = bak;
+        if (bad){ toast('Não dá: há vendas que ficavam sem compras. Apaga primeiro a venda.'); return; }
+        if (!(await ask('Apagar esta operação?', { ok:'Apagar', danger:true }))) return;
+        I.ops = I.ops.filter(x => x.id !== o.id); if (!I.ops.some(x => x.ativoId === id)) I.ativos = I.ativos.filter(x => x.id !== id);
+        save(); render(); toast('Operação apagada');
+      });
+    });
+}
+function invPrecosSheet(){
+  const R = invResumo(); const ps = R.pos.filter(p => p.c.qtd > 0);
+  formSheet('Atualizar valores', ps.map(p => ({ k:'p_' + p.a.id, label:`${p.a.nome} · preço por unidade (€)`, type:'num', value:p.a.preco || '', hint:`${String(p.c.qtd).replace('.', ',')} un. · vê o preço na ${p.a.corretora}` })), out => {
+    const d = iso(today()); for (const p of ps){ const v = out['p_' + p.a.id]; if (v > 0){ p.a.preco = r4(v); p.a.precoData = d; } }
+  });
+}
+function invAnexoSheet(ano){
+  const A = invAno(ano);
+  const row = l => `<div class="card" style="padding:10px 12px;display:flex;flex-direction:column;gap:2px"><p class="t15" style="margin:0">${esc(l.ativo.nome)} · ${String(l.qtd).replace('.', ',')} un.</p>
+    <p class="small" style="margin:0">País: ${(() => { const p = invPais(l.ativo.isin); return p ? `${esc(p.nome)}${p.num ? ' (' + p.num + ')' : ''}` : '<span style="color:var(--amber)">falta o ISIN</span>'; })()}</p>
+    <p class="small" style="margin:0">Realização: ${l.dataReal.split('-').reverse().join('/')} · ${eur(l.valorReal)}</p>
+    <p class="small" style="margin:0">Aquisição: ${l.dataAq.split('-').reverse().join('/')} · ${eur(l.valorAq)}</p>
+    <p class="small" style="margin:0">Despesas e encargos: ${eur(l.despesas)} · <b style="color:${l.ganho >= 0 ? 'var(--teal)' : '#DC2626'}">${l.ganho >= 0 ? '+' : '−'}${eur(Math.abs(l.ganho))}</b></p></div>`;
+  openSheet(`<div class="between"><h2>Anexo J · ${ano}</h2><button class="iconbtn" data-close aria-label="Fechar">${ic('x')}</button></div>
+    <p class="small muted" style="margin:0">Quadro 9.2 A: uma linha por cada lote vendido (a app já separou pelas datas de compra).</p>
+    ${A.linhas.map(row).join('') || '<p class="small muted">Sem vendas neste ano.</p>'}
+    ${A.divs.length ? `<p class="lbl" style="margin:6px 0 0">Dividendos (quadro 8 A)</p>${A.divs.map(d => `<div class="item"><div class="grow"><p class="t15" style="margin:0">${esc(d.ativo?.nome || '')}</p><p class="small muted" style="margin:0">${d.data.split('-').reverse().join('/')} · ${(() => { const p = invPais(d.ativo?.isin); return p ? esc(p.nome) : 'país?'; })()}</p></div><p class="small" style="text-align:right;margin:0;white-space:nowrap;flex-shrink:0">bruto ${eur(d.valor)}<br>retido ${eur(d.retido || 0)}</p></div>`).join('')}` : ''}
+    <p class="small muted" style="margin:0">O país vem das 2 letras do ISIN (onde a empresa ou o fundo está registado). Confirma os códigos na declaração.</p>`);
+}
+// Importação do CSV de transações da DEGIRO (PT ou EN)
+function invImportDegiro(text){
+  const rows = parseCSVText(text.replace(/^﻿/, '')).filter(r => r.some(c => String(c).trim()));
+  const hi = rows.findIndex(r => { const n = r.map(norm); return n.includes('isin') && n.some(c => /^(produto|product)$/.test(c)); });
+  if (hi < 0) return { erro:'Não reconheço este ficheiro. Na DEGIRO: Atividade → Transações → Exportar CSV.' };
+  const H = rows[hi].map(c => norm(c).trim());
+  const col = (...re) => H.findIndex(h => re.some(r => r.test(h)));
+  const cData = col(/^(data|date)$/), cHora = col(/^(hora|time)$/), cProd = col(/^(produto|product)$/), cIsin = col(/^isin$/), cQtd = col(/^(quantidade|quantity)$/), cPreco = col(/^(precos?|price)$/);
+  const cValor = col(/^(valor|value)$/), cCusto = col(/custos|fees|comiss/), cOrd = col(/^(id da ordem|order id|order)$/);
+  if ([cData, cProd, cIsin, cQtd].some(x => x < 0)) return { erro:'Faltam colunas (Data, Produto, ISIN, Quantidade).' };
+  const I = inv(); if (!I.corretoras.includes('DEGIRO')) I.corretoras.unshift('DEGIRO');
+  const items = [];
+  for (const r of rows.slice(hi + 1)){
+    const qtd = numFlex(r[cQtd]); if (!qtd || isNaN(qtd)) continue;
+    const ds = String(r[cData] || '').trim(); const m = ds.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/) || ds.match(/^(\d{4})-(\d{2})-(\d{2})$/); if (!m) continue;
+    const data = m[1].length === 4 ? `${m[1]}-${m[2]}-${m[3]}` : `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    const valorEur = cValor >= 0 ? Math.abs(numFlex(r[cValor])) : NaN; const precoLocal = cPreco >= 0 ? numFlex(r[cPreco]) : NaN;
+    const preco = valorEur > 0 ? valorEur / Math.abs(qtd) : precoLocal;
+    if (!(preco > 0)) continue;
+    items.push({ data, hora: cHora >= 0 ? String(r[cHora]).trim() : '', nome:String(r[cProd]).trim(), isin:String(r[cIsin]).trim().toUpperCase(), qtd:Math.abs(qtd), tipo: qtd > 0 ? 'compra' : 'venda', preco, comissao: cCusto >= 0 ? Math.abs(numFlex(r[cCusto])) || 0 : 0, ord: cOrd >= 0 ? String(r[cOrd]).trim() : '' });
+  }
+  if (!items.length) return { erro:'Não encontrei transações neste ficheiro.' };
+  items.sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora) || (a.tipo === b.tipo ? 0 : a.tipo === 'compra' ? -1 : 1));
+  let novas = 0, dup = 0;
+  for (const it of items){
+    const key = `degiro|${it.data}|${it.hora}|${it.isin}|${it.tipo}|${r4(it.qtd)}|${r2(it.preco * it.qtd)}|${it.ord}`;
+    if (I.ops.some(o => o.importKey === key)){ dup++; continue; }
+    let a = I.ativos.find(x => x.corretora === 'DEGIRO' && x.isin && x.isin === it.isin) || I.ativos.find(x => x.corretora === 'DEGIRO' && norm(x.nome) === norm(it.nome));
+    if (!a){ a = { id:uid(), nome:it.nome, isin:it.isin, corretora:'DEGIRO', preco:0, precoData:'' }; I.ativos.push(a); }
+    I.ops.push({ id:uid(), data:it.data, tipo:it.tipo, ativoId:a.id, qtd:r4(it.qtd), preco:r4(it.preco), comissao:r2(it.comissao), importKey:key });
+    if (it.tipo === 'compra' && (!a.preco || it.data >= (a.precoData || ''))){ a.preco = r4(it.preco); a.precoData = it.data; }
+    novas++;
+  }
+  return { novas, dup };
 }
 
 /* ---------- Ecrã: Impostos ---------- */
@@ -2190,6 +2476,8 @@ function onboarding(){
 function migrate(){ if (!S.v) S.v = 1; if (S.onboarded === undefined) S.onboarded = true;
   for (const dc of DEFAULT_CATEGORIES){ const c = S.categories.find(x => x.nome === dc.nome); if (c){ c.kw = c.kw || []; for (const k of dc.kw) if (!c.kw.includes(k)) c.kw.push(k); } }
   S.importRules = S.importRules || {}; S.marcas = S.marcas || {}; S.reservasAntigas = S.reservasAntigas || [];
+  if (!S.inv){ S.inv = { corretoras:['DEGIRO','Trade Republic'], ativos:[], ops:[] }; const v = S.settings.investimentosValor || 0;
+    if (v > 0){ const a = { id:uid(), nome:'Carteira (sem detalhe)', isin:'', corretora:'DEGIRO', preco:r4(v), precoData:iso(today()) }; S.inv.ativos.push(a); S.inv.ops.push({ id:uid(), data:iso(today()), tipo:'compra', ativoId:a.id, qtd:1, preco:r4(v), comissao:0 }); } }
   if (!S.goals.some(g => g.id === 'ppr_joao')) S.goals.push({ id:'ppr_joao', nome:'PPR do João', saldo:0, alvo:0, mensal:0, fase:2, pct:0, tipo:'futuro' });
   if (!S.mig142){ S.mig142 = true; const e = S.goals.find(g => g.tipo === 'emergencia'); if (e && e.fase === 1 && !(e.mensal > 0)) { e.fase = 2; e.mensal = 0; } }
   S.settings = { ...freshState().settings, ...S.settings };
@@ -2216,7 +2504,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:'){
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 // Exposto só para testes automáticos
-window.__vt = { imp: { readStatement: f => readStatement(f), statementItems: r => statementItems(r), classify: i => classifyItem(i), get IMP(){ return IMP; } }, t: { saldoConta: () => saldoConta(), monthSpend: k => monthSpend(k), monthIncome: k => monthIncome(k), debtPlanPending: () => debtPlanPending(), goalsPending: () => goalsPending(), fase: () => fase(), taxReserve: () => taxReserve() }, parseCommand: t => parseCommand(t), describe: t => describeAction(parseCommand(t)), rawVault: async () => JSON.stringify(await readVault()), parseQuick, livre: () => livre(), simulateDebts: x => simulateDebts(x), get S(){ return S; }, deadlines: () => deadlines(), taxBreakdown: () => taxBreakdown() };
+window.__vt = { inv: { calc: id => invCalc(id), resumo: () => invResumo(), ano: y => invAno(y), importDegiro: t => invImportDegiro(t), patrimonio: () => patrimonio() }, imp: { readStatement: f => readStatement(f), statementItems: r => statementItems(r), classify: i => classifyItem(i), get IMP(){ return IMP; } }, t: { saldoConta: () => saldoConta(), monthSpend: k => monthSpend(k), monthIncome: k => monthIncome(k), debtPlanPending: () => debtPlanPending(), goalsPending: () => goalsPending(), fase: () => fase(), taxReserve: () => taxReserve() }, parseCommand: t => parseCommand(t), describe: t => describeAction(parseCommand(t)), rawVault: async () => JSON.stringify(await readVault()), parseQuick, livre: () => livre(), simulateDebts: x => simulateDebts(x), get S(){ return S; }, deadlines: () => deadlines(), taxBreakdown: () => taxBreakdown() };
 </script>
 </body>
 </html>
